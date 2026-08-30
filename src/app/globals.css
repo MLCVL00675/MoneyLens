@@ -162,3 +162,10 @@
 .cl-headerTitle {
   font-family: "DM Serif Display", Georgia, serif !important;
 }
+
+/* Clerk development badge cleanup */
+.cl-internal-b3fm6y,
+.cl-development-badge,
+[data-localization-key="developmentMode.badge"] {
+  display: none !important;
+}
