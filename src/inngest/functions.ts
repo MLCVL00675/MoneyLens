@@ -3,18 +3,26 @@ import { db } from "@/lib/prisma";
 import { geminiModel } from "@/lib/gemini";
 import { resend } from "@/lib/resend";
 
-// 1. Recurring Transaction Runner - Daily midnight
+// 1. Recurring Transaction Runner - Daily midnight (IST & UTC)
 export const processRecurringTransactions = inngest.createFunction(
-  { id: "process-recurring-transactions", triggers: [{ cron: "0 0 * * *" }] },
+  {
+    id: "process-recurring-transactions",
+    triggers: [
+      { cron: "TZ=Asia/Kolkata 0 0 * * *" },
+      { cron: "0 0 * * *" },
+    ],
+  },
   async ({ step }: any) => {
     await step.run("find-and-process-recurring", async () => {
       const now = new Date();
+      // Timezone-aware threshold: include transactions due today (up to +6 hours for IST offset)
+      const threshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
 
       // Find all due recurring transactions
       const dueTransactions = await db.transaction.findMany({
         where: {
           isRecurring: true,
-          nextRecurringDate: { lte: now },
+          nextRecurringDate: { lte: threshold },
           status: "COMPLETED",
         },
         include: { account: true },
