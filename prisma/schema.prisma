@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum AccountType {
+  CURRENT
+  SAVINGS
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum RecurringInterval {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  REDEEMED
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(uuid())
+  clerkUserId String   @unique
+  email       String   @unique
+  name        String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accounts     Account[]
+  transactions Transaction[]
+  budget       Budget?
+  goals        Goal[]
+  categories   Category[]
+
+  @@index([clerkUserId])
+}
+
+model Account {
+  id               String      @id @default(uuid())
+  name             String
+  type             AccountType
+  balance          Decimal     @default(0) @db.Decimal(12, 2)
+  isDefault        Boolean     @default(false)
+  isDecommissioned Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions      Transaction[]
+  goalContributions GoalContribution[]
+
+  @@index([userId])
+  @@index([isDecommissioned])
+}
+
+model Transaction {
+  id          String            @id @default(uuid())
+  type        TransactionType
+  amount      Decimal           @db.Decimal(12, 2)
+  description String
+  date        DateTime
+  category    String
+  receiptUrl  String?
+  status      TransactionStatus @default(COMPLETED)
+
+  // Recurring fields
+  isRecurring       Boolean            @default(false)
+  recurringInterval RecurringInterval?
+  nextRecurringDate DateTime?
+  lastProcessed     DateTime?
+
+  // Transfer linking
+  transferId        String?
+  transferAccountId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Optional goal reference
+  goalId String?
+  goal   Goal?   @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([goalId])
+  @@index([date])
+  @@index([type])
+  @@index([isRecurring, nextRecurringDate])
+}
+
+model Budget {
+  id            String    @id @default(uuid())
+  amount        Decimal   @db.Decimal(12, 2)
+  lastAlertSent DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Goal {
+  id            String     @id @default(uuid())
+  name          String
+  targetAmount  Decimal    @db.Decimal(12, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(12, 2)
+  deadline      DateTime?
+  status        GoalStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  contributions GoalContribution[]
+  transactions  Transaction[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model GoalContribution {
+  id          String   @id @default(uuid())
+  amount      Decimal  @db.Decimal(12, 2)
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  goalId    String
+  goal      Goal    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([accountId])
+}
+
+model Category {
+  id        String          @id @default(uuid())
+  name      String
+  icon      String?
+  type      TransactionType @default(EXPENSE)
+  isDefault Boolean         @default(false)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([name, type, userId])
+  @@index([userId])
+}

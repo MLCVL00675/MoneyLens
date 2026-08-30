@@ -1,0 +1,164 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 33% 97%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 37 52% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 36 20% 90%;
+    --secondary-foreground: 0 0% 20%;
+    --muted: 36 15% 92%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 155 40% 40%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 32 20% 87%;
+    --input: 32 20% 87%;
+    --ring: 37 52% 55%;
+    --radius: 0.75rem;
+    --chart-1: 155 40% 40%;
+    --chart-2: 37 52% 55%;
+    --chart-3: 0 55% 55%;
+    --chart-4: 210 40% 50%;
+    --chart-5: 280 40% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3 {
+    @apply font-serif;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4C9BA;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C4B9AA;
+}
+
+/* Smooth transitions for interactive elements */
+@layer utilities {
+  .transition-default {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-sm border border-cream-300 rounded-xl shadow-sm;
+  }
+
+  .gradient-gold {
+    @apply bg-gradient-to-br from-gold-400 to-gold-600;
+  }
+
+  .gradient-forest {
+    @apply bg-gradient-to-br from-forest-400 to-forest-700;
+  }
+
+  .gradient-navy {
+    @apply bg-gradient-to-br from-navy-800 to-navy-950;
+  }
+
+  .stat-card {
+    @apply bg-white rounded-xl border border-cream-300 p-5 hover:shadow-md transition-default;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-default;
+  }
+
+  .nav-item-active {
+    @apply bg-white/10 text-white;
+  }
+
+  .nav-item-inactive {
+    @apply text-gray-400 hover:text-white hover:bg-white/5;
+  }
+}
+
+/* Landing page 3D tilt animation */
+.dashboard-preview {
+  perspective: 1200px;
+}
+
+.dashboard-preview-inner {
+  transform: rotateY(-8deg) rotateX(6deg);
+  transition: transform 0.6s ease;
+}
+
+.dashboard-preview-inner:hover {
+  transform: rotateY(-2deg) rotateX(2deg);
+}
+
+/* Number counter animation */
+@keyframes number-tick {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.animate-number {
+  animation: number-tick 0.6s ease-out forwards;
+}
+
+/* Stagger children animations */
+.stagger-children > * {
+  opacity: 0;
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.6s; }
+
+/* Receipt scanner drop zone */
+.drop-zone {
+  @apply border-2 border-dashed border-cream-400 rounded-xl p-8 text-center cursor-pointer transition-default;
+}
+
+.drop-zone:hover,
+.drop-zone.active {
+  @apply border-forest-500 bg-forest-500/5;
+}
+
+/* Clerk custom styling */
+.cl-card {
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.cl-headerTitle {
+  font-family: "DM Serif Display", Georgia, serif !important;
+}
