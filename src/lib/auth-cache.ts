@@ -1,4 +1,5 @@
 import { db } from "@/lib/prisma";
+import { currentUser } from "@clerk/nextjs/server";
 
 // In-memory cache for clerkUserId -> { id, email, name }
 const userCache = new Map<string, { id: string; email: string; name?: string | null; cachedAt: number }>();
@@ -12,10 +13,36 @@ export async function getCachedUser(clerkUserId: string) {
     return cached;
   }
 
-  const user = await db.user.findUnique({
+  let user = await db.user.findUnique({
     where: { clerkUserId },
     select: { id: true, email: true, name: true },
   });
+
+  // Auto-sync from Clerk if user is not in DB yet (e.g. after DB cleanup or new signup)
+  if (!user) {
+    try {
+      const clerkUser = await currentUser();
+      if (clerkUser && clerkUser.id === clerkUserId) {
+        user = await db.user.upsert({
+          where: { clerkUserId },
+          update: {
+            email: clerkUser.emailAddresses[0]?.emailAddress ?? "",
+            name: `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim(),
+            imageUrl: clerkUser.imageUrl,
+          },
+          create: {
+            clerkUserId,
+            email: clerkUser.emailAddresses[0]?.emailAddress ?? "",
+            name: `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim(),
+            imageUrl: clerkUser.imageUrl,
+          },
+          select: { id: true, email: true, name: true },
+        });
+      }
+    } catch (e) {
+      console.error("Error auto-syncing Clerk user to DB:", e);
+    }
+  }
 
   if (user) {
     userCache.set(clerkUserId, { ...user, cachedAt: now });
