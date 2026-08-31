@@ -34,7 +34,7 @@ export async function searchMutualFunds(query: string): Promise<MarketSearchResu
   try {
     const res = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(query.trim())}`, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-      next: { revalidate: 3600 }, // Cache 1 hour
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!res.ok) return [];
@@ -57,7 +57,7 @@ export async function getMutualFundQuote(schemeCode: string | number): Promise<M
   try {
     const res = await fetch(`https://api.mfapi.in/mf/${schemeCode}/latest`, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-      next: { revalidate: 300 }, // Cache 5 min
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!res.ok) return null;
@@ -75,7 +75,7 @@ export async function getMutualFundQuote(schemeCode: string | number): Promise<M
       symbol: String(schemeCode),
       name: meta.scheme_name || `MF Scheme ${schemeCode}`,
       price: currentNav,
-      previousClose: currentNav, // mfapi returns latest published NAV
+      previousClose: currentNav,
       changePercent: 0,
       currency: "INR",
       exchange: "AMFI",
@@ -99,7 +99,7 @@ export async function searchStocks(query: string): Promise<MarketSearchResult[]>
       `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0`,
       {
         headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(5000),
       }
     );
 
@@ -129,7 +129,7 @@ export async function getStockQuote(symbol: string): Promise<MarketQuote | null>
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`,
       {
         headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-        next: { revalidate: 60 }, // Cache 1 min
+        signal: AbortSignal.timeout(5000),
       }
     );
 
@@ -168,17 +168,30 @@ export async function getStockQuote(symbol: string): Promise<MarketQuote | null>
 export async function searchAssets(query: string): Promise<MarketSearchResult[]> {
   if (!query || query.trim().length < 2) return [];
 
-  const [mfResults, stockResults] = await Promise.all([
-    searchMutualFunds(query),
-    searchStocks(query),
-  ]);
+  try {
+    const [mfResults, stockResults] = await Promise.allSettled([
+      searchMutualFunds(query),
+      searchStocks(query),
+    ]);
 
-  return [...mfResults, ...stockResults];
+    const mfs = mfResults.status === "fulfilled" ? mfResults.value : [];
+    const stocks = stockResults.status === "fulfilled" ? stockResults.value : [];
+
+    return [...mfs, ...stocks];
+  } catch (error) {
+    console.error("Error in searchAssets:", error);
+    return [];
+  }
 }
 
 export async function getAssetLiveQuote(symbol: string, assetType: "MUTUAL_FUND" | "STOCK" | "ETF" | string): Promise<MarketQuote | null> {
-  if (assetType === "MUTUAL_FUND" || /^\d+$/.test(symbol.trim())) {
-    return getMutualFundQuote(symbol);
+  try {
+    if (assetType === "MUTUAL_FUND" || /^\d+$/.test(symbol.trim())) {
+      return await getMutualFundQuote(symbol);
+    }
+    return await getStockQuote(symbol);
+  } catch (error) {
+    console.error(`Error in getAssetLiveQuote for ${symbol}:`, error);
+    return null;
   }
-  return getStockQuote(symbol);
 }

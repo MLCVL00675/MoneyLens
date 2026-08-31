@@ -9,9 +9,11 @@ import {
   syncInvestmentPrices,
   parseInvestmentStatement,
   importInvestments,
+  searchMarketAssets,
+  fetchAssetLiveQuote,
   ParsedHolding,
 } from "@/actions/investments";
-import { searchAssets, getAssetLiveQuote, MarketSearchResult } from "@/lib/market-api";
+import { MarketSearchResult } from "@/lib/market-api";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -103,24 +105,30 @@ export default function InvestmentsPage() {
     loadData();
   }, [loadData]);
 
-  // Live Asset Search Debounce
+  // Live Asset Search Debounce (Server Action)
   useEffect(() => {
     if (!assetSearch || assetSearch.trim().length < 2) {
       setSearchResults([]);
+      setSearchingAssets(false);
       return;
     }
+
+    setSearchingAssets(true);
     const timer = setTimeout(async () => {
-      setSearchingAssets(true);
       try {
-        const results = await searchAssets(assetSearch);
-        setSearchResults(results);
-      } catch {
+        const results = await searchMarketAssets(assetSearch.trim());
+        setSearchResults(results || []);
+      } catch (err) {
+        console.error("Search error:", err);
         setSearchResults([]);
       } finally {
         setSearchingAssets(false);
       }
-    }, 350);
-    return () => clearTimeout(timer);
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
   }, [assetSearch]);
 
   const handleSelectAsset = async (asset: MarketSearchResult) => {
@@ -131,10 +139,11 @@ export default function InvestmentsPage() {
     setFormCategory(asset.category || "");
     setSearchResults([]);
     setAssetSearch("");
+    setSearchingAssets(false);
 
     // Fetch live quote to pre-fill buy price
     try {
-      const quote = await getAssetLiveQuote(asset.symbol, asset.assetType);
+      const quote = await fetchAssetLiveQuote(asset.symbol, asset.assetType);
       if (quote?.price) {
         setFormBuyPrice(String(quote.price));
         if (quote.category) setFormCategory(quote.category);
@@ -898,14 +907,25 @@ export default function InvestmentsPage() {
                   placeholder="e.g. Parag Parikh, Quant Small Cap, RELIANCE, TCS..."
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-cream-300 text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
                 />
-                {searchingAssets && (
-                  <RefreshCw className="w-4 h-4 text-forest-600 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
-                )}
+                {searchingAssets ? (
+                  <RefreshCw className="w-4 h-4 text-forest-600 animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                ) : assetSearch ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssetSearch("");
+                      setSearchResults([]);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-md text-gray-400 hover:text-gray-700"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
               </div>
 
               {/* Search Suggestions Dropdown */}
               {searchResults.length > 0 && (
-                <div className="mt-1 bg-white border border-cream-300 rounded-xl shadow-lg divide-y divide-cream-100 max-h-48 overflow-y-auto">
+                <div className="mt-1 bg-white border border-cream-300 rounded-xl shadow-lg divide-y divide-cream-100 max-h-48 overflow-y-auto z-10 relative">
                   {searchResults.map((item) => (
                     <button
                       key={item.symbol + item.name}
@@ -923,6 +943,13 @@ export default function InvestmentsPage() {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* No results message */}
+              {!searchingAssets && assetSearch.trim().length >= 2 && searchResults.length === 0 && (
+                <p className="text-[11px] text-gray-400 mt-1.5 px-1">
+                  No matching assets found. You can enter details manually below.
+                </p>
               )}
             </div>
 

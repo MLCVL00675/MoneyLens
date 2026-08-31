@@ -5,7 +5,7 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { getCachedUser } from "@/lib/auth-cache";
 import { geminiModel } from "@/lib/gemini";
-import { getAssetLiveQuote, searchMutualFunds, searchStocks } from "@/lib/market-api";
+import { getAssetLiveQuote, searchAssets, searchMutualFunds, searchStocks } from "@/lib/market-api";
 
 export interface ParsedHolding {
   name: string;
@@ -407,4 +407,18 @@ export async function syncInvestmentPrices() {
   revalidatePath("/investments");
   revalidatePath("/dashboard");
   return { success: true, updatedCount };
+}
+
+// ─── Live Search & Quote Server Actions ───────────────────────────────────────
+
+export async function searchMarketAssets(query: string) {
+  const { userId } = await auth();
+  if (!userId) return [];
+  return searchAssets(query);
+}
+
+export async function fetchAssetLiveQuote(symbol: string, assetType: string) {
+  const { userId } = await auth();
+  if (!userId) return null;
+  return getAssetLiveQuote(symbol, assetType);
 }
