@@ -40,6 +40,14 @@ enum GoalStatus {
   REDEEMED
 }
 
+enum AssetType {
+  MUTUAL_FUND
+  STOCK
+  ETF
+  CRYPTO
+  GOLD
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -56,6 +64,7 @@ model User {
   budget       Budget?
   goals        Goal[]
   categories   Category[]
+  investments  Investment[]
 
   @@index([clerkUserId])
 }
@@ -75,6 +84,7 @@ model Account {
 
   transactions      Transaction[]
   goalContributions GoalContribution[]
+  investments       Investment[]
 
   @@index([userId])
   @@index([isDecommissioned])
@@ -179,4 +189,34 @@ model Category {
 
   @@unique([name, type, userId])
   @@index([userId])
+}
+
+model Investment {
+  id              String    @id @default(uuid())
+  symbol          String    // e.g. AMFI Scheme Code "122639" or Stock Ticker "RELIANCE.NS"
+  name            String    // Scheme name or Company name
+  assetType       AssetType @default(MUTUAL_FUND)
+  units           Decimal   @db.Decimal(18, 4) // Units held / Quantity
+  buyPrice        Decimal   @db.Decimal(12, 2) // Average purchase price / NAV
+  currentPrice    Decimal   @default(0) @db.Decimal(12, 2) // Live CMP / Latest NAV
+  previousClose   Decimal?  @db.Decimal(12, 2) // Previous day closing price for 1D P&L
+  currency        String    @default("INR")
+  exchange        String?   // "AMFI", "NSE", "BSE", "NASDAQ"
+  category        String?   // e.g. "Equity - Flexi Cap", "Large Cap", "Technology"
+  folioOrAccount  String?   // Folio Number or Demat Account
+  notes           String?
+  lastPriceUpdate DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId       String?
+  account         Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([assetType])
+  @@index([symbol])
 }

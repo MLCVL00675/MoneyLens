@@ -9,6 +9,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   Target,
+  TrendingUp,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -22,6 +23,7 @@ export function Sidebar() {
   const navItems = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/accounts", label: "Accounts", icon: Wallet },
+    { href: "/investments", label: "Investments", icon: TrendingUp },
     { href: "/activity", label: "Activity", icon: ArrowLeftRight },
     { href: "/analysis", label: "Analysis", icon: BarChart3 },
     { href: "/goals", label: "Goals", icon: Target },

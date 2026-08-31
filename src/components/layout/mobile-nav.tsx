@@ -9,7 +9,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   Target,
-  Plus,
+  TrendingUp,
 } from "lucide-react";
 
 export function MobileNav() {
@@ -18,6 +18,7 @@ export function MobileNav() {
   const navItems = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/accounts", label: "Accounts", icon: Wallet },
+    { href: "/investments", label: "Invest", icon: TrendingUp },
     { href: "/activity", label: "Activity", icon: ArrowLeftRight },
     { href: "/analysis", label: "Analysis", icon: BarChart3 },
     { href: "/goals", label: "Goals", icon: Target },
