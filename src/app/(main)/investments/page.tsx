@@ -450,51 +450,149 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* Asset Allocation Section */}
+      {/* Asset Allocation & Top Performers Grid */}
       {assetAllocation.length > 0 && (
-        <div className="bg-white rounded-2xl border border-cream-300 p-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-cream-200">
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-1">
-                Asset Allocation
-              </p>
-              <h3 className="text-base font-serif text-gray-900">Portfolio Distribution</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Portfolio Distribution with Centered Donut and Progress Bars */}
+          <div className="lg:col-span-7 bg-white rounded-2xl border border-cream-300 p-5 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between pb-3 mb-2 border-b border-cream-200">
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-0.5">
+                  Asset Allocation
+                </p>
+                <h3 className="text-base font-serif text-gray-900">Portfolio Distribution</h3>
+              </div>
+              <span className="text-xs font-semibold text-gray-500 bg-cream-100 px-2.5 py-1 rounded-full">
+                {holdings.length} Assets
+              </span>
             </div>
-            <div className="flex items-center gap-4 flex-wrap">
-              {assetAllocation.map((item: any, i: number) => (
-                <div key={item.name} className="flex items-center gap-2 text-xs">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: ALLOCATION_COLORS[i % ALLOCATION_COLORS.length] }}
-                  />
-                  <span className="text-gray-600 font-medium">{item.name}:</span>
-                  <span className="font-bold text-gray-900">
-                    {formatCurrency(item.value)} ({item.percentage.toFixed(1)}%)
-                  </span>
+
+            <div className="flex flex-col sm:flex-row items-center gap-6 my-auto py-2">
+              {/* Donut Chart with Center Metric */}
+              <div className="w-40 h-40 relative shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={assetAllocation}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={72}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {assetAllocation.map((_: any, index: number) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(val: any) => formatCurrency(Number(val) || 0)} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-1">
+                  <p className="text-[9px] uppercase font-bold tracking-wider text-gray-400">Total</p>
+                  <p
+                    className="text-xs font-bold text-gray-900 truncate max-w-[85px]"
+                    title={formatCurrency(summary.totalCurrentValue)}
+                  >
+                    {formatCurrency(summary.totalCurrentValue).split(".")[0]}
+                  </p>
                 </div>
-              ))}
+              </div>
+
+              {/* Segmented Asset Bars & Values */}
+              <div className="flex-1 w-full space-y-3.5">
+                {assetAllocation.map((item: any, i: number) => (
+                  <div key={item.name} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: ALLOCATION_COLORS[i % ALLOCATION_COLORS.length] }}
+                        />
+                        <span className="font-semibold text-gray-800">{item.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-gray-900">{formatCurrency(item.value)}</span>
+                        <span className="text-gray-400 text-[11px] ml-1 font-medium">
+                          ({item.percentage.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                    {/* Visual Progress Bar */}
+                    <div className="w-full h-2 rounded-full bg-cream-200/80 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(item.percentage, 3)}%`,
+                          backgroundColor: ALLOCATION_COLORS[i % ALLOCATION_COLORS.length],
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="h-44 mt-3 relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={assetAllocation}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={75}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {assetAllocation.map((_: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(val: any) => formatCurrency(Number(val) || 0)} />
-              </PieChart>
-            </ResponsiveContainer>
+          {/* Top Performers / Portfolio Highlights Card */}
+          <div className="lg:col-span-5 bg-white rounded-2xl border border-cream-300 p-5 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between pb-3 mb-2 border-b border-cream-200">
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-0.5">
+                  Performance
+                </p>
+                <h3 className="text-base font-serif text-gray-900">Top Performers</h3>
+              </div>
+              <span className="text-xs font-semibold text-forest-700 bg-forest-50 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Gainers</span>
+              </span>
+            </div>
+
+            {holdings.length > 0 ? (
+              <div className="divide-y divide-cream-100 my-auto">
+                {[...holdings]
+                  .sort((a: any, b: any) => b.returnPercent - a.returnPercent)
+                  .slice(0, 3)
+                  .map((h: any) => {
+                    const isProfit = h.totalReturn >= 0;
+                    return (
+                      <div key={h.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-900 truncate" title={h.name}>
+                            {h.name}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                            {h.symbol} · {h.assetType === "MUTUAL_FUND" ? "Mutual Fund" : h.assetType}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`text-xs font-bold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                            {isProfit ? "+" : ""}{formatCurrency(h.totalReturn)}
+                          </p>
+                          <p className={`text-[10px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                            {isProfit ? "+" : ""}{h.returnPercent.toFixed(2)}%
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-gray-400 text-xs">
+                No performance data yet.
+              </div>
+            )}
+
+            <div className="pt-3 mt-2 border-t border-cream-200 flex items-center justify-between text-[11px] text-gray-500">
+              <span>Overall Portfolio ROI:</span>
+              <strong className={summary.totalReturnPercent >= 0 ? "text-forest-600 font-bold" : "text-coral-600 font-bold"}>
+                {summary.totalReturnPercent >= 0 ? "+" : ""}{summary.totalReturnPercent.toFixed(2)}%
+              </strong>
+            </div>
           </div>
         </div>
       )}
