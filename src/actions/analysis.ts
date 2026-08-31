@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
-import { serializeTransaction } from "@/lib/utils";
+import { serializeTransaction, formatDateKey, formatMonthKey, getTimezoneMonthBounds } from "@/lib/utils";
 import { getCachedUser } from "@/lib/auth-cache";
 
 export async function getAnalyticsData(params: {
@@ -16,10 +16,14 @@ export async function getAnalyticsData(params: {
   const user = await getCachedUser(userId);
   if (!user) throw new Error("User not found");
 
-  const start = new Date(params.startDate);
+  const start = params.startDate.includes("T")
+    ? new Date(params.startDate)
+    : new Date(`${params.startDate}T00:00:00+05:30`);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(params.endDate);
-  end.setHours(23, 59, 59, 999);
+
+  const end = params.endDate.includes("T")
+    ? new Date(params.endDate)
+    : new Date(`${params.endDate}T23:59:59.999+05:30`);
 
   const whereClause: any = {
     userId: user.id,
@@ -46,8 +50,10 @@ export async function getAnalyticsData(params: {
 
   transactions.forEach((t) => {
     const amount = t.amount.toNumber();
-    const dateKey = t.date.toISOString().split("T")[0];
-    const monthKey = `${t.date.getFullYear()}-${String(t.date.getMonth() + 1).padStart(2, "0")}`;
+    const dateKey = formatDateKey(t.date);
+    const monthKey = formatMonthKey(t.date);
+
+    if (!dateKey || !monthKey) return;
 
     // Totals
     if (t.type === "INCOME") {
@@ -66,7 +72,7 @@ export async function getAnalyticsData(params: {
       categoryBreakdown[t.category].expense += amount;
     }
 
-    // Daily data for line chart
+    // Daily data for line/area chart
     if (!dailyData[dateKey]) {
       dailyData[dateKey] = { date: dateKey, income: 0, expense: 0 };
     }
@@ -130,15 +136,17 @@ export async function sendMonthlyReportEmail() {
   const user = await getCachedUser(userId);
   if (!user) throw new Error("User not found");
 
-  const now = new Date();
-  const monthName = now.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const { currentMonthStart, currentMonthEnd } = getTimezoneMonthBounds(new Date());
+  const monthName = currentMonthStart.toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
 
   let transactions = await db.transaction.findMany({
     where: {
       userId: user.id,
-      date: { gte: start, lte: end },
+      date: { gte: currentMonthStart, lte: currentMonthEnd },
       status: "COMPLETED",
     },
   });

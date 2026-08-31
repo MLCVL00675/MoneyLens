@@ -99,3 +99,61 @@ export function getCategoryIcon(name: string): string {
   );
   return cat?.icon ?? "tag";
 }
+
+/**
+ * Returns YYYY-MM-DD formatted date string in the specified timezone (defaults to Asia/Kolkata).
+ */
+export function formatDateKey(date: Date | string, timeZone: string = "Asia/Kolkata"): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone });
+}
+
+/**
+ * Returns YYYY-MM formatted month string in the specified timezone (defaults to Asia/Kolkata).
+ */
+export function formatMonthKey(date: Date | string, timeZone: string = "Asia/Kolkata"): string {
+  const key = formatDateKey(date, timeZone);
+  return key ? key.slice(0, 7) : "";
+}
+
+/**
+ * Returns current or given date in YYYY-MM-DD format based on local/IST timezone.
+ */
+export function getLocalDateString(date: Date = new Date(), timeZone: string = "Asia/Kolkata"): string {
+  return formatDateKey(date, timeZone);
+}
+
+/**
+ * Calculate precise month boundaries in Indian Standard Time (or specified timezone)
+ * converting to UTC Dates for Prisma querying.
+ */
+export function getTimezoneMonthBounds(date: Date = new Date(), timeZone: string = "Asia/Kolkata") {
+  const dateStr = formatDateKey(date, timeZone);
+  const [yearStr, monthStr] = dateStr.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10); // 1-12
+
+  // Current month start & end (IST is +05:30)
+  const currentMonthStart = new Date(`${yearStr}-${monthStr}-01T00:00:00+05:30`);
+  const nextMonthYear = month === 12 ? year + 1 : year;
+  const nextMonthNum = month === 12 ? 1 : month + 1;
+  const nextMonthStr = String(nextMonthNum).padStart(2, "0");
+  const nextMonthFirst = new Date(`${nextMonthYear}-${nextMonthStr}-01T00:00:00+05:30`);
+  const currentMonthEnd = new Date(nextMonthFirst.getTime() - 1);
+
+  // Last month start & end
+  const lastMonthYear = month === 1 ? year - 1 : year;
+  const lastMonth = month === 1 ? 12 : month - 1;
+  const lastMonthStr = String(lastMonth).padStart(2, "0");
+  const lastMonthStart = new Date(`${lastMonthYear}-${lastMonthStr}-01T00:00:00+05:30`);
+  const lastMonthEnd = new Date(currentMonthStart.getTime() - 1);
+
+  return {
+    currentMonthStart,
+    currentMonthEnd,
+    lastMonthStart,
+    lastMonthEnd,
+  };
+}

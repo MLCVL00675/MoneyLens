@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createTransaction, scanReceipt } from "@/actions/transaction";
 import { getAccounts } from "@/actions/account";
 import { getCategories, createCategory, deleteCategory } from "@/actions/category";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -36,7 +36,7 @@ export default function CreateTransactionPage() {
   const [type, setType] = useState<"EXPENSE" | "INCOME" | "TRANSFER">("EXPENSE");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(getLocalDateString());
   const [category, setCategory] = useState("");
   const [accountId, setAccountId] = useState("");
   const [transferAccountId, setTransferAccountId] = useState("");

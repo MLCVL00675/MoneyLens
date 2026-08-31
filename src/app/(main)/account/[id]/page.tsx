@@ -10,7 +10,7 @@ import {
   recommissionAccount,
 } from "@/actions/account";
 import { deleteTransaction, bulkDeleteTransactions } from "@/actions/transaction";
-import { formatCurrency, formatDate, getCategoryIcon } from "@/lib/utils";
+import { formatCurrency, formatDate, getCategoryIcon, formatDateKey } from "@/lib/utils";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -210,7 +210,8 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
 
   const chartDataMap: Record<string, { date: string; income: number; expense: number }> = {};
   chartTransactions.forEach((t: any) => {
-    const dateKey = new Date(t.date).toISOString().split("T")[0];
+    const dateKey = formatDateKey(t.date);
+    if (!dateKey) return;
     if (!chartDataMap[dateKey]) {
       chartDataMap[dateKey] = { date: dateKey, income: 0, expense: 0 };
     }
@@ -512,12 +513,19 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "#9CA3AF" }}
-                  tickFormatter={(v) =>
-                    new Date(v).toLocaleDateString("en-IN", {
+                  tickFormatter={(v) => {
+                    if (typeof v === "string" && v.includes("-")) {
+                      const [y, m, d] = v.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+                        month: "short",
+                        day: "numeric",
+                      });
+                    }
+                    return new Date(v).toLocaleDateString("en-IN", {
                       month: "short",
                       day: "numeric",
-                    })
-                  }
+                    });
+                  }}
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: "#9CA3AF" }}
@@ -525,6 +533,18 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                 />
                 <Tooltip
                   formatter={(value: any) => [formatCurrency(Number(value) || 0), ""]}
+                  labelFormatter={(label) => {
+                    if (typeof label === "string" && label.includes("-")) {
+                      const [y, m, d] = label.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+                    }
+                    return label;
+                  }}
                   contentStyle={{
                     backgroundColor: "white",
                     border: "1px solid #E8E0D4",

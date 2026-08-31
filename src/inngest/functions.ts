@@ -2,6 +2,7 @@ import { inngest } from "@/lib/inngest";
 import { db } from "@/lib/prisma";
 import { geminiModel } from "@/lib/gemini";
 import { resend } from "@/lib/resend";
+import { getTimezoneMonthBounds } from "@/lib/utils";
 
 // 1. Recurring Transaction Runner - Daily midnight (IST & UTC)
 export const processRecurringTransactions = inngest.createFunction(
@@ -29,13 +30,16 @@ export const processRecurringTransactions = inngest.createFunction(
       });
 
       for (const tx of dueTransactions) {
+        // Scheduled recurring date for the new transaction
+        const targetDate = tx.nextRecurringDate ? new Date(tx.nextRecurringDate) : now;
+
         // Create new transaction
         await db.transaction.create({
           data: {
             type: tx.type,
             amount: tx.amount,
             description: tx.description,
-            date: now,
+            date: targetDate,
             category: tx.category,
             accountId: tx.accountId,
             userId: tx.userId,
@@ -56,20 +60,20 @@ export const processRecurringTransactions = inngest.createFunction(
           data: { balance: { increment: balanceChange } },
         });
 
-        // Calculate next recurring date
-        const nextDate = new Date(tx.nextRecurringDate!);
+        // Calculate next recurring date using UTC methods to prevent timezone drift
+        const nextDate = new Date(tx.nextRecurringDate || now);
         switch (tx.recurringInterval) {
           case "DAILY":
-            nextDate.setDate(nextDate.getDate() + 1);
+            nextDate.setUTCDate(nextDate.getUTCDate() + 1);
             break;
           case "WEEKLY":
-            nextDate.setDate(nextDate.getDate() + 7);
+            nextDate.setUTCDate(nextDate.getUTCDate() + 7);
             break;
           case "MONTHLY":
-            nextDate.setMonth(nextDate.getMonth() + 1);
+            nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
             break;
           case "YEARLY":
-            nextDate.setFullYear(nextDate.getFullYear() + 1);
+            nextDate.setUTCFullYear(nextDate.getUTCFullYear() + 1);
             break;
         }
 
@@ -97,14 +101,14 @@ export const checkBudgetAlerts = inngest.createFunction(
       });
 
       const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const { currentMonthStart } = getTimezoneMonthBounds(now);
       let alertsSent = 0;
 
       for (const budget of budgets) {
         // Check if alert already sent this month
         if (
           budget.lastAlertSent &&
-          budget.lastAlertSent >= monthStart
+          budget.lastAlertSent >= currentMonthStart
         ) {
           continue;
         }
@@ -114,7 +118,7 @@ export const checkBudgetAlerts = inngest.createFunction(
           where: {
             userId: budget.userId,
             type: "EXPENSE",
-            date: { gte: monthStart },
+            date: { gte: currentMonthStart },
             status: "COMPLETED",
           },
           _sum: { amount: true },
@@ -182,10 +186,12 @@ export const monthlyFinancialReport = inngest.createFunction(
   async ({ step }: any) => {
     await step.run("generate-reports", async () => {
       const users = await db.user.findMany();
-      const now = new Date();
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      const monthName = lastMonthStart.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+      const { lastMonthStart, lastMonthEnd } = getTimezoneMonthBounds(new Date());
+      const monthName = lastMonthStart.toLocaleDateString("en-IN", {
+        month: "long",
+        year: "numeric",
+        timeZone: "Asia/Kolkata",
+      });
 
       let reportsSent = 0;
 

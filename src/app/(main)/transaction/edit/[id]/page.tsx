@@ -4,7 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { updateTransaction } from "@/actions/transaction";
 import { getCategories } from "@/actions/category";
-import { db } from "@/lib/prisma";
+import { formatDateKey } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -47,7 +47,7 @@ export default function EditTransactionPage({
           setType(tx.type);
           setAmount(String(tx.amount));
           setDescription(tx.description);
-          setDate(new Date(tx.date).toISOString().split("T")[0]);
+          setDate(formatDateKey(tx.date));
           setCategory(tx.category);
           setIsRecurring(tx.isRecurring);
           setRecurringInterval(tx.recurringInterval || "");

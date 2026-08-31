@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getAnalyticsData } from "@/actions/analysis";
 import { getAccounts } from "@/actions/account";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -58,10 +58,9 @@ export default function AnalysisPage() {
         endDate = appliedCustom.end;
       } else {
         const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - selectedRange);
-        startDate = start.toISOString().split("T")[0];
-        endDate = end.toISOString().split("T")[0];
+        const start = new Date(end.getTime() - selectedRange * 24 * 60 * 60 * 1000);
+        startDate = getLocalDateString(start);
+        endDate = getLocalDateString(end);
       }
 
       const [analyticsData, accs] = await Promise.all([
@@ -87,7 +86,7 @@ export default function AnalysisPage() {
   }, [loadData]);
 
   const handleApplyCustom = () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     let start = "";
     let end = "";
 
@@ -150,8 +149,8 @@ export default function AnalysisPage() {
               key={range.label}
               onClick={() => {
                 if (range.days === 0) {
-                  const today = new Date().toISOString().split("T")[0];
-                  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+                  const today = getLocalDateString();
+                  const thirtyDaysAgo = getLocalDateString(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
                   if (!customStart) setCustomStart(thirtyDaysAgo);
                   if (!customEnd) setCustomEnd(today);
                   setShowCustom(true);
@@ -212,7 +211,7 @@ export default function AnalysisPage() {
                 <input
                   type="date"
                   value={customStart}
-                  max={customEnd || new Date().toISOString().split("T")[0]}
+                  max={customEnd || getLocalDateString()}
                   onChange={(e) => {
                     const newStart = e.target.value;
                     setCustomStart(newStart);
@@ -227,7 +226,7 @@ export default function AnalysisPage() {
                   type="date"
                   value={customEnd}
                   min={customStart || undefined}
-                  max={new Date().toISOString().split("T")[0]}
+                  max={getLocalDateString()}
                   onChange={(e) => {
                     const newEnd = e.target.value;
                     if (customStart && newEnd < customStart) {
@@ -247,7 +246,7 @@ export default function AnalysisPage() {
                 <input
                   type="date"
                   value={customStart}
-                  max={new Date().toISOString().split("T")[0]}
+                  max={getLocalDateString()}
                   onChange={(e) => setCustomStart(e.target.value)}
                   className="border border-cream-300 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-forest-500 bg-white"
                 />
@@ -261,7 +260,7 @@ export default function AnalysisPage() {
                 <input
                   type="date"
                   value={customEnd}
-                  max={new Date().toISOString().split("T")[0]}
+                  max={getLocalDateString()}
                   onChange={(e) => setCustomEnd(e.target.value)}
                   className="border border-cream-300 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-forest-500 bg-white"
                 />
@@ -534,9 +533,13 @@ export default function AnalysisPage() {
                         axisLine={{ stroke: "#E8E0D4" }}
                         tickLine={false}
                         tick={{ fontSize: 10, fill: "#6B7280" }}
-                        tickFormatter={(v) =>
-                          new Date(v).toLocaleDateString("en-IN", { month: "short", day: "numeric" })
-                        }
+                        tickFormatter={(v) => {
+                          if (typeof v === "string" && v.includes("-")) {
+                            const [y, m, d] = v.split("-").map(Number);
+                            return new Date(y, m - 1, d).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+                          }
+                          return new Date(v).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+                        }}
                       />
                       <YAxis
                         axisLine={false}
@@ -554,12 +557,23 @@ export default function AnalysisPage() {
                           if (!active || !payload || !payload.length) return null;
                           const income = payload.find((p: any) => p.dataKey === "income")?.value || 0;
                           const expense = payload.find((p: any) => p.dataKey === "expense")?.value || 0;
-                          const formattedDate = new Date(label).toLocaleDateString("en-IN", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          });
+                          let formattedDate = label;
+                          if (typeof label === "string" && label.includes("-")) {
+                            const [y, m, d] = label.split("-").map(Number);
+                            formattedDate = new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            });
+                          } else if (label) {
+                            formattedDate = new Date(label).toLocaleDateString("en-IN", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            });
+                          }
 
                           return (
                             <div className="bg-navy-900/95 backdrop-blur-md text-white px-3.5 py-2.5 rounded-xl shadow-2xl border border-white/10 text-xs min-w-[160px] animate-scale-in">

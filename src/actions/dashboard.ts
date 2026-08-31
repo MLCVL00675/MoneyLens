@@ -2,10 +2,9 @@
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
-import { serializeTransaction } from "@/lib/utils";
+import { serializeTransaction, formatDateKey, getTimezoneMonthBounds } from "@/lib/utils";
 import { getCachedUser } from "@/lib/auth-cache";
 import { revalidatePath } from "next/cache";
-import { startOfMonth, endOfMonth, subMonths, subDays } from "date-fns";
 
 export async function getDashboardData(days: number = 30) {
   const { userId } = await auth();
@@ -14,11 +13,8 @@ export async function getDashboardData(days: number = 30) {
   const user = await getCachedUser(userId);
   if (!user) throw new Error("User not found");
 
-  const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd = endOfMonth(subMonths(now, 1));
+  const { currentMonthStart, currentMonthEnd, lastMonthStart, lastMonthEnd } =
+    getTimezoneMonthBounds(new Date());
 
   // Parallel lean queries
   const [
@@ -46,7 +42,7 @@ export async function getDashboardData(days: number = 30) {
     db.transaction.findMany({
       where: {
         userId: user.id,
-        date: { gte: monthStart, lte: monthEnd },
+        date: { gte: currentMonthStart, lte: currentMonthEnd },
         status: "COMPLETED",
       },
       select: {
@@ -195,8 +191,9 @@ export async function getBalanceHistory(days: number = 30) {
   const user = await getCachedUser(userId);
   if (!user) throw new Error("User not found");
 
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
+  const now = new Date();
+  const startDate = new Date(now.getTime() - (days + 1) * 24 * 60 * 60 * 1000);
+  startDate.setHours(0, 0, 0, 0);
 
   const transactions = await db.transaction.findMany({
     where: {
@@ -207,11 +204,12 @@ export async function getBalanceHistory(days: number = 30) {
     orderBy: { date: "asc" },
   });
 
-  // Group by date
+  // Group by date in IST timezone
   const dailyData: Record<string, { income: number; expense: number }> = {};
 
   transactions.forEach((t) => {
-    const dateKey = t.date.toISOString().split("T")[0];
+    const dateKey = formatDateKey(t.date);
+    if (!dateKey) return;
     if (!dailyData[dateKey]) {
       dailyData[dateKey] = { income: 0, expense: 0 };
     }

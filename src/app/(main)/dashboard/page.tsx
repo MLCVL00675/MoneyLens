@@ -254,6 +254,10 @@ export default function DashboardPage() {
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "#9CA3AF" }}
                   tickFormatter={(val) => {
+                    if (typeof val === "string" && val.includes("-")) {
+                      const [y, m, d] = val.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+                    }
                     const d = new Date(val);
                     return `${d.toLocaleDateString("en-IN", { month: "short", day: "numeric" })}`;
                   }}
@@ -264,6 +268,18 @@ export default function DashboardPage() {
                 />
                 <Tooltip
                   formatter={(value: any) => [formatCurrency(Number(value) || 0), ""]}
+                  labelFormatter={(label) => {
+                    if (typeof label === "string" && label.includes("-")) {
+                      const [y, m, d] = label.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+                    }
+                    return label;
+                  }}
                   contentStyle={{
                     backgroundColor: "white",
                     border: "1px solid #E8E0D4",
