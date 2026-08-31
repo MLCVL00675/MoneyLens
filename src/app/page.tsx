@@ -84,27 +84,27 @@ export default async function LandingPage() {
               <div className="w-3 h-3 rounded-full bg-gold-500/60" />
               <div className="w-3 h-3 rounded-full bg-forest-500/60" />
             </div>
-            <div className="p-6 bg-cream-100">
-              <div className="grid grid-cols-4 gap-3 mb-4">
-                <div className="bg-gradient-to-br from-forest-500 to-forest-700 rounded-xl p-4 text-white">
+            <div className="p-4 sm:p-6 bg-cream-100">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+                <div className="bg-gradient-to-br from-forest-500 to-forest-700 rounded-xl p-3 sm:p-4 text-white">
                   <p className="text-[8px] font-semibold tracking-[0.15em] uppercase text-green-200">Total Balance</p>
-                  <p className="text-xl font-bold mt-1">₹1,81,950</p>
+                  <p className="text-base sm:text-xl font-bold mt-1">₹1,81,950</p>
                   <p className="text-green-200 text-[10px] mt-1">+4.8% this month</p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-cream-300">
+                <div className="bg-white rounded-xl p-3 sm:p-4 border border-cream-300">
                   <p className="text-[8px] font-semibold tracking-[0.15em] uppercase text-gray-500">Monthly Income</p>
-                  <p className="text-xl font-bold mt-1">₹82,400</p>
+                  <p className="text-base sm:text-xl font-bold mt-1">₹82,400</p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-cream-300">
+                <div className="bg-white rounded-xl p-3 sm:p-4 border border-cream-300">
                   <p className="text-[8px] font-semibold tracking-[0.15em] uppercase text-gray-500">Monthly Spend</p>
-                  <p className="text-xl font-bold mt-1">₹34,128</p>
+                  <p className="text-base sm:text-xl font-bold mt-1">₹34,128</p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-cream-300">
+                <div className="bg-white rounded-xl p-3 sm:p-4 border border-cream-300">
                   <p className="text-[8px] font-semibold tracking-[0.15em] uppercase text-gray-500">Savings Rate</p>
-                  <p className="text-xl font-bold mt-1">58.6%</p>
+                  <p className="text-base sm:text-xl font-bold mt-1">58.6%</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-white rounded-xl p-4 border border-cream-300 h-32">
                   <p className="text-xs font-medium text-gray-500 mb-2">Balance Rhythm</p>
                   <div className="flex items-end gap-1 h-16">

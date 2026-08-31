@@ -134,7 +134,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 stagger-children">
         {/* Total Balance */}
         <div className="stat-card bg-gradient-to-br from-forest-500 to-forest-700 text-white border-0">
           <div className="flex items-center justify-between mb-3">

@@ -400,89 +400,174 @@ export default function ActivityPage() {
             {filtered.map((tx: any) => (
               <div
                 key={tx.id}
-                className={`grid grid-cols-1 md:grid-cols-[44px_90px_1fr_130px_120px_44px] gap-3 px-5 py-3.5 items-center hover:bg-cream-50/70 transition-default ${
+                className={`p-3.5 sm:px-5 sm:py-3.5 hover:bg-cream-50/70 transition-default ${
                   selectedIds.has(tx.id) ? "bg-forest-50/30" : ""
                 }`}
               >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(tx.id)}
-                  onChange={() => toggleSelect(tx.id)}
-                  className="w-4 h-4 rounded border-cream-300 text-forest-600 focus:ring-forest-500"
-                />
-                <span className="text-sm text-gray-600 font-medium">
-                  {new Date(tx.date).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </span>
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${
-                      tx.type === "INCOME"
-                        ? "bg-forest-500/10 text-forest-700"
-                        : tx.type === "TRANSFER"
-                        ? "bg-navy-900/10 text-navy-800"
-                        : "bg-coral-500/10 text-coral-700"
-                    }`}
-                  >
-                    {tx.type === "TRANSFER" ? (
-                      <ArrowRightLeft className="w-4 h-4" />
-                    ) : (
-                      <CategoryIcon category={tx.category} className="w-4 h-4" />
-                    )}
+                {/* Desktop Grid Layout */}
+                <div className="hidden md:grid md:grid-cols-[44px_90px_1fr_130px_120px_44px] gap-3 items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(tx.id)}
+                    onChange={() => toggleSelect(tx.id)}
+                    className="w-4 h-4 rounded border-cream-300 text-forest-600 focus:ring-forest-500"
+                  />
+                  <span className="text-sm text-gray-600 font-medium">
+                    {new Date(tx.date).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${
+                        tx.type === "INCOME"
+                          ? "bg-forest-500/10 text-forest-700"
+                          : tx.type === "TRANSFER"
+                          ? "bg-navy-900/10 text-navy-800"
+                          : "bg-coral-500/10 text-coral-700"
+                      }`}
+                    >
+                      {tx.type === "TRANSFER" ? (
+                        <ArrowRightLeft className="w-4 h-4" />
+                      ) : (
+                        <CategoryIcon category={tx.category} className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div>
+                      <Link
+                        href={`/transaction/edit/${tx.id}`}
+                        className="text-sm font-semibold text-gray-900 hover:text-forest-600 transition-colors"
+                      >
+                        {tx.description}
+                      </Link>
+                      <p className="text-[11px] text-gray-400 flex items-center gap-1.5 mt-0.5">
+                        {(tx.isRecurring || tx.recurringInterval) && (
+                          <span className="text-gold-600 font-medium">
+                            Recurring ({tx.recurringInterval?.toLowerCase() || "daily"}) ·
+                          </span>
+                        )}
+                        <span>{tx.account?.name || "Account"}</span>
+                      </p>
+                    </div>
                   </div>
                   <div>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-cream-100 text-gray-700 font-medium inline-block">
+                      {tx.category}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`text-sm font-bold ${
+                        tx.type === "INCOME"
+                          ? "text-forest-600"
+                          : tx.type === "TRANSFER"
+                          ? "text-navy-900"
+                          : "text-coral-600"
+                      }`}
+                    >
+                      {tx.type === "INCOME" ? "+" : tx.type === "TRANSFER" ? "⇄ " : "-"}
+                      {formatCurrency(Number(tx.amount) || 0)}
+                    </span>
+                  </div>
+                  <div className="text-right flex items-center justify-end gap-1">
                     <Link
                       href={`/transaction/edit/${tx.id}`}
-                      className="text-sm font-semibold text-gray-900 hover:text-forest-600 transition-colors"
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-navy-900 hover:bg-cream-100 transition-default"
+                      title="Edit Transaction"
                     >
-                      {tx.description}
+                      <Pencil className="w-3.5 h-3.5" />
                     </Link>
-                    <p className="text-[11px] text-gray-400 flex items-center gap-1.5 mt-0.5">
-                      {(tx.isRecurring || tx.recurringInterval) && (
-                        <span className="text-gold-600 font-medium">
-                          Recurring ({tx.recurringInterval?.toLowerCase() || "daily"}) ·
-                        </span>
-                      )}
-                      <span>{tx.account?.name || "Account"}</span>
-                    </p>
+                    <button
+                      onClick={() => handleDelete(tx.id)}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-coral-500 hover:bg-coral-50 transition-default"
+                      title="Delete Transaction"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-cream-100 text-gray-700 font-medium inline-block">
-                    {tx.category}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span
-                    className={`text-sm font-bold ${
-                      tx.type === "INCOME"
-                        ? "text-forest-600"
-                        : tx.type === "TRANSFER"
-                        ? "text-navy-900"
-                        : "text-coral-600"
-                    }`}
-                  >
-                    {tx.type === "INCOME" ? "+" : tx.type === "TRANSFER" ? "⇄ " : "-"}
-                    {formatCurrency(Number(tx.amount) || 0)}
-                  </span>
-                </div>
-                <div className="text-right flex items-center justify-end gap-1">
-                  <Link
-                    href={`/transaction/edit/${tx.id}`}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-navy-900 hover:bg-cream-100 transition-default"
-                    title="Edit Transaction"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(tx.id)}
-                    className="p-1.5 rounded-lg text-gray-300 hover:text-coral-500 hover:bg-coral-50 transition-default"
-                    title="Delete Transaction"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+
+                {/* Mobile Card Layout */}
+                <div className="flex md:hidden items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(tx.id)}
+                      onChange={() => toggleSelect(tx.id)}
+                      className="w-4 h-4 rounded border-cream-300 text-forest-600 focus:ring-forest-500 shrink-0"
+                    />
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0 ${
+                        tx.type === "INCOME"
+                          ? "bg-forest-500/10 text-forest-700"
+                          : tx.type === "TRANSFER"
+                          ? "bg-navy-900/10 text-navy-800"
+                          : "bg-coral-500/10 text-coral-700"
+                      }`}
+                    >
+                      {tx.type === "TRANSFER" ? (
+                        <ArrowRightLeft className="w-4 h-4" />
+                      ) : (
+                        <CategoryIcon category={tx.category} className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/transaction/edit/${tx.id}`}
+                        className="text-sm font-semibold text-gray-900 hover:text-forest-600 transition-colors truncate block"
+                      >
+                        {tx.description}
+                      </Link>
+                      <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-0.5 flex-wrap">
+                        <span>
+                          {new Date(tx.date).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </span>
+                        <span>·</span>
+                        <span>{tx.account?.name || "Account"}</span>
+                        {(tx.isRecurring || tx.recurringInterval) && (
+                          <>
+                            <span>·</span>
+                            <span className="text-gold-600 font-medium">Recurring</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0 flex flex-col items-end">
+                    <span
+                      className={`text-sm font-bold ${
+                        tx.type === "INCOME"
+                          ? "text-forest-600"
+                          : tx.type === "TRANSFER"
+                          ? "text-navy-900"
+                          : "text-coral-600"
+                      }`}
+                    >
+                      {tx.type === "INCOME" ? "+" : tx.type === "TRANSFER" ? "⇄ " : "-"}
+                      {formatCurrency(Number(tx.amount) || 0)}
+                    </span>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Link
+                        href={`/transaction/edit/${tx.id}`}
+                        className="p-1 rounded text-gray-400 hover:text-navy-900 hover:bg-cream-100"
+                        title="Edit"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(tx.id)}
+                        className="p-1 rounded text-gray-300 hover:text-coral-500 hover:bg-coral-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}

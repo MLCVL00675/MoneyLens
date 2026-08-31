@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getAnalyticsData, sendMonthlyReportEmail } from "@/actions/analysis";
+import { getAnalyticsData } from "@/actions/analysis";
 import { getAccounts } from "@/actions/account";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ import { CategoryIcon } from "@/components/ui/category-icon";
 import {
   TrendingUp, TrendingDown, DollarSign, Calendar,
   BarChart3, PieChart as PieIcon, Activity, ArrowUpDown,
-  Layers, ArrowDownLeft, ArrowUpRight, Percent, Mail,
+  Layers, ArrowDownLeft, ArrowUpRight, Percent,
 } from "lucide-react";
 
 const CHART_COLORS = ["#4A8B6E", "#C75C5C", "#D4A843", "#6366F1", "#EC4899", "#F59E0B", "#8B5CF6", "#06B6D4", "#F97316", "#14B8A6"];
@@ -42,23 +42,6 @@ export default function AnalysisPage() {
   const [appliedCustom, setAppliedCustom] = useState<{ start: string; end: string } | null>(null);
   const [categoryTab, setCategoryTab] = useState<"all" | "expense" | "income">("all");
   const [pieTab, setPieTab] = useState<"expense" | "income">("expense");
-  const [sendingEmail, setSendingEmail] = useState(false);
-
-  const handleSendEmail = async () => {
-    setSendingEmail(true);
-    try {
-      const res = await sendMonthlyReportEmail();
-      if (res.success) {
-        toast.success(`Monthly financial report sent to ${res.email}!`);
-      } else {
-        toast.error(res.error || "Failed to send email");
-      }
-    } catch {
-      toast.error("Failed to send monthly report email");
-    } finally {
-      setSendingEmail(false);
-    }
-  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -148,26 +131,14 @@ export default function AnalysisPage() {
   return (
     <div className="max-w-[1200px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-1">
-            Deep Dive
-          </p>
-          <h1 className="text-3xl font-serif text-gray-900">Analysis</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Understand where your money goes and how your wealth grows.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleSendEmail}
-          disabled={sendingEmail}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-cream-300 text-sm font-medium text-navy-900 hover:bg-cream-50 hover:border-cream-400 shadow-2xs transition-default disabled:opacity-50"
-        >
-          <Mail className="w-4 h-4 text-forest-600" />
-          <span>{sendingEmail ? "Generating & Sending..." : "Email Monthly Report"}</span>
-        </button>
+      <div>
+        <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-1">
+          Deep Dive
+        </p>
+        <h1 className="text-3xl font-serif text-gray-900">Analysis</h1>
+        <p className="text-gray-500 text-sm mt-1">
+          Understand where your money goes and how your wealth grows.
+        </p>
       </div>
 
       {/* Filters */}

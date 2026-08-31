@@ -40,7 +40,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 bottom-0 bg-navy-900 flex flex-col z-40 transition-all duration-300 ease-in-out border-r border-white/5 select-none",
+        "hidden md:flex fixed left-0 top-0 bottom-0 bg-navy-900 flex-col z-40 transition-all duration-300 ease-in-out border-r border-white/5 select-none",
         isCollapsed ? "w-[68px]" : "w-[220px]"
       )}
     >

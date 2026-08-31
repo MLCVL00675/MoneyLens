@@ -722,68 +722,136 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
               {filtered.map((tx: any) => (
                 <div
                   key={tx.id}
-                  className={`grid grid-cols-1 md:grid-cols-[40px_90px_1fr_120px_100px_40px] gap-3 px-4 py-3 items-center hover:bg-cream-50 transition-default ${
+                  className={`p-3.5 sm:px-4 sm:py-3 hover:bg-cream-50 transition-default ${
                     selectedIds.has(tx.id) ? "bg-forest-50/30" : ""
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(tx.id)}
-                    onChange={() => toggleSelect(tx.id)}
-                    className="w-3.5 h-3.5 rounded border-cream-300 text-forest-500 focus:ring-forest-500"
-                  />
-                  <span className="text-sm text-gray-600">
-                    {new Date(tx.date).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </span>
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                      tx.type === "INCOME" ? "bg-forest-500/10 text-forest-700" : "bg-coral-500/10 text-coral-700"
-                    }`}>
-                      <CategoryIcon category={tx.category} className="w-3.5 h-3.5" />
+                  {/* Desktop Grid */}
+                  <div className="hidden md:grid md:grid-cols-[40px_90px_1fr_120px_100px_40px] gap-3 items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(tx.id)}
+                      onChange={() => toggleSelect(tx.id)}
+                      className="w-3.5 h-3.5 rounded border-cream-300 text-forest-500 focus:ring-forest-500"
+                    />
+                    <span className="text-sm text-gray-600">
+                      {new Date(tx.date).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        tx.type === "INCOME" ? "bg-forest-500/10 text-forest-700" : "bg-coral-500/10 text-coral-700"
+                      }`}>
+                        <CategoryIcon category={tx.category} className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <Link
+                          href={`/transaction/edit/${tx.id}`}
+                          className="text-sm font-medium text-gray-900 hover:text-forest-600 transition-colors"
+                        >
+                          {tx.description}
+                        </Link>
+                        <p className="text-[10px] text-gray-400">
+                          {(tx.isRecurring || tx.recurringInterval) && (
+                            <span className="text-gold-600 font-medium">
+                              Recurring ({tx.recurringInterval?.toLowerCase() || "daily"}) ·{" "}
+                            </span>
+                          )}
+                          {account.name}
+                        </p>
+                      </div>
                     </div>
-                    <div>
+                    <span className="text-xs px-2 py-1 rounded-full bg-cream-100 text-gray-600 w-fit">
+                      {tx.category}
+                    </span>
+                    <span className={`text-sm font-semibold text-right ${
+                      tx.type === "INCOME" ? "text-forest-500" : "text-coral-500"
+                    }`}>
+                      {tx.type === "INCOME" ? "+" : "-"}₹{Number(tx.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                    <div className="flex items-center justify-end gap-1">
                       <Link
                         href={`/transaction/edit/${tx.id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-forest-600 transition-colors"
+                        className="p-1 rounded text-gray-400 hover:text-navy-900 transition-default"
+                        title="Edit Transaction"
                       >
-                        {tx.description}
+                        <Pencil className="w-3.5 h-3.5" />
                       </Link>
-                      <p className="text-[10px] text-gray-400">
-                        {(tx.isRecurring || tx.recurringInterval) && (
-                          <span className="text-gold-600 font-medium">
-                            Recurring ({tx.recurringInterval?.toLowerCase() || "daily"}) ·{" "}
-                          </span>
-                        )}
-                        {account.name}
-                      </p>
+                      <button
+                        onClick={() => handleDelete(tx.id)}
+                        className="p-1 rounded text-gray-300 hover:text-coral-500 transition-default"
+                        title="Delete Transaction"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-cream-100 text-gray-600 w-fit">
-                    {tx.category}
-                  </span>
-                  <span className={`text-sm font-semibold text-right ${
-                    tx.type === "INCOME" ? "text-forest-500" : "text-coral-500"
-                  }`}>
-                    {tx.type === "INCOME" ? "+" : "-"}₹{Number(tx.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  </span>
-                  <div className="flex items-center justify-end gap-1">
-                    <Link
-                      href={`/transaction/edit/${tx.id}`}
-                      className="p-1 rounded text-gray-400 hover:text-navy-900 transition-default"
-                      title="Edit Transaction"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(tx.id)}
-                      className="p-1 rounded text-gray-300 hover:text-coral-500 transition-default"
-                      title="Delete Transaction"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+
+                  {/* Mobile Card */}
+                  <div className="flex md:hidden items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(tx.id)}
+                        onChange={() => toggleSelect(tx.id)}
+                        className="w-3.5 h-3.5 rounded border-cream-300 text-forest-500 focus:ring-forest-500 shrink-0"
+                      />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        tx.type === "INCOME" ? "bg-forest-500/10 text-forest-700" : "bg-coral-500/10 text-coral-700"
+                      }`}>
+                        <CategoryIcon category={tx.category} className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <Link
+                          href={`/transaction/edit/${tx.id}`}
+                          className="text-sm font-medium text-gray-900 hover:text-forest-600 transition-colors truncate block"
+                        >
+                          {tx.description}
+                        </Link>
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
+                          <span>
+                            {new Date(tx.date).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </span>
+                          <span>·</span>
+                          <span>{tx.category}</span>
+                          {(tx.isRecurring || tx.recurringInterval) && (
+                            <>
+                              <span>·</span>
+                              <span className="text-gold-600 font-medium">Recurring</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 flex flex-col items-end">
+                      <span className={`text-sm font-semibold ${
+                        tx.type === "INCOME" ? "text-forest-500" : "text-coral-500"
+                      }`}>
+                        {tx.type === "INCOME" ? "+" : "-"}₹{Number(tx.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                      <div className="flex items-center gap-1 mt-1">
+                        <Link
+                          href={`/transaction/edit/${tx.id}`}
+                          className="p-1 rounded text-gray-400 hover:text-navy-900"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(tx.id)}
+                          className="p-1 rounded text-gray-300 hover:text-coral-500"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
