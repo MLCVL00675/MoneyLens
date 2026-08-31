@@ -450,49 +450,25 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* Asset Allocation & Highlights Section */}
+      {/* Asset Allocation Section */}
       {assetAllocation.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl border border-cream-300 p-5 lg:col-span-1 flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-cream-300 p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-cream-200">
             <div>
               <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-1">
                 Asset Allocation
               </p>
               <h3 className="text-base font-serif text-gray-900">Portfolio Distribution</h3>
             </div>
-
-            <div className="h-44 my-2 relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={assetAllocation}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {assetAllocation.map((_: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(val: any) => formatCurrency(Number(val) || 0)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="space-y-1.5 pt-2 border-t border-cream-200">
+            <div className="flex items-center gap-4 flex-wrap">
               {assetAllocation.map((item: any, i: number) => (
-                <div key={item.name} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: ALLOCATION_COLORS[i % ALLOCATION_COLORS.length] }}
-                    />
-                    <span className="text-gray-700 font-medium">{item.name}</span>
-                  </div>
-                  <span className="font-semibold text-gray-900">
+                <div key={item.name} className="flex items-center gap-2 text-xs">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: ALLOCATION_COLORS[i % ALLOCATION_COLORS.length] }}
+                  />
+                  <span className="text-gray-600 font-medium">{item.name}:</span>
+                  <span className="font-bold text-gray-900">
                     {formatCurrency(item.value)} ({item.percentage.toFixed(1)}%)
                   </span>
                 </div>
@@ -500,47 +476,25 @@ export default function InvestmentsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-cream-300 p-5 lg:col-span-2 flex flex-col justify-between">
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-1">
-                AI Statement Sync
-              </p>
-              <h3 className="text-base font-serif text-gray-900">Import Holdings in 1-Click</h3>
-              <p className="text-gray-500 text-xs mt-1 leading-relaxed">
-                Upload your latest CAMS or KFintech Consolidated Account Statement (CAS), CDSL/NSDL Demat statement, or Zerodha/Groww portfolio exports. Gemini AI automatically parses all folios, units, and purchase prices.
-              </p>
-            </div>
-
-            <div className="bg-cream-50/70 border border-cream-300/80 rounded-xl p-4 my-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-forest-500/10 text-forest-600 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-900">Supported Documents</p>
-                  <p className="text-[11px] text-gray-500">CAMS CAS · KFintech · CDSL · Zerodha · Groww</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-navy-900 text-white text-xs font-medium hover:bg-navy-800 transition-default flex items-center justify-center gap-2 shrink-0"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload Statement</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-forest-600" />
-                <span>Private &amp; Local</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-gold-600" />
-                <span>Gemini 2.5 Flash assisted</span>
-              </div>
-            </div>
+          <div className="h-44 mt-3 relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={assetAllocation}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={75}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {assetAllocation.map((_: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(val: any) => formatCurrency(Number(val) || 0)} />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
