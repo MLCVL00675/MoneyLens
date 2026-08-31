@@ -586,13 +586,6 @@ export default function InvestmentsPage() {
                 No performance data yet.
               </div>
             )}
-
-            <div className="pt-3 mt-2 border-t border-cream-200 flex items-center justify-between text-[11px] text-gray-500">
-              <span>Overall Portfolio ROI:</span>
-              <strong className={summary.totalReturnPercent >= 0 ? "text-forest-600 font-bold" : "text-coral-600 font-bold"}>
-                {summary.totalReturnPercent >= 0 ? "+" : ""}{summary.totalReturnPercent.toFixed(2)}%
-              </strong>
-            </div>
           </div>
         </div>
       )}
