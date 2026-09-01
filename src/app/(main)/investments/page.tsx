@@ -203,8 +203,12 @@ export default function InvestmentsPage() {
     setSyncing(true);
     try {
       const res = await syncInvestmentPrices();
-      toast.success(`Updated live prices for ${res.updatedCount} assets`);
-      loadData();
+      if (res.updatedCount > 0) {
+        toast.success(`Updated live prices for ${res.updatedCount} asset${res.updatedCount === 1 ? "" : "s"}`);
+      } else {
+        toast.info("All investment prices are up to date");
+      }
+      await loadData();
     } catch {
       toast.error("Failed to sync live market prices");
     } finally {

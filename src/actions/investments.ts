@@ -118,8 +118,8 @@ export async function importInvestments(holdings: ParsedHolding[]) {
     // Check if we can fetch live price to enrich
     let liveQuote = null;
     try {
-      if (h.symbol) {
-        liveQuote = await getAssetLiveQuote(h.symbol, h.assetType);
+      if (h.symbol || h.name) {
+        liveQuote = await getAssetLiveQuote(h.symbol, h.assetType, h.name);
       }
     } catch {
       // Ignore lookup failure
@@ -284,9 +284,9 @@ export async function createInvestment(data: {
   let currentPrice = data.currentPrice;
   let previousClose = data.currentPrice;
 
-  if (!currentPrice && data.symbol) {
+  if (!currentPrice && (data.symbol || data.name)) {
     try {
-      const quote = await getAssetLiveQuote(data.symbol, data.assetType);
+      const quote = await getAssetLiveQuote(data.symbol, data.assetType, data.name);
       if (quote?.price) {
         currentPrice = quote.price;
         previousClose = quote.previousClose || quote.price;
@@ -380,13 +380,16 @@ export async function syncInvestmentPrices() {
     where: { userId: user.id },
   });
 
-  let updatedCount = 0;
+  if (holdings.length === 0) {
+    return { success: true, updatedCount: 0 };
+  }
 
-  for (const h of holdings) {
-    if (!h.symbol) continue;
+  // Update all holdings concurrently for fast 1-click sync
+  const updatePromises = holdings.map(async (h) => {
+    if (!h.symbol && !h.name) return false;
 
     try {
-      const quote = await getAssetLiveQuote(h.symbol, h.assetType);
+      const quote = await getAssetLiveQuote(h.symbol, h.assetType, h.name);
       if (quote && quote.price > 0) {
         await db.investment.update({
           where: { id: h.id },
@@ -397,10 +400,19 @@ export async function syncInvestmentPrices() {
             lastPriceUpdate: new Date(),
           },
         });
-        updatedCount++;
+        return true;
       }
     } catch (e) {
-      console.error(`Error syncing price for ${h.symbol}:`, e);
+      console.error(`Error syncing price for ${h.symbol || h.name}:`, e);
+    }
+    return false;
+  });
+
+  const settledResults = await Promise.allSettled(updatePromises);
+  let updatedCount = 0;
+  for (const res of settledResults) {
+    if (res.status === "fulfilled" && res.value) {
+      updatedCount++;
     }
   }
 
@@ -417,8 +429,8 @@ export async function searchMarketAssets(query: string) {
   return searchAssets(query);
 }
 
-export async function fetchAssetLiveQuote(symbol: string, assetType: string) {
+export async function fetchAssetLiveQuote(symbol: string, assetType: string, name?: string) {
   const { userId } = await auth();
   if (!userId) return null;
-  return getAssetLiveQuote(symbol, assetType);
+  return getAssetLiveQuote(symbol, assetType, name);
 }
