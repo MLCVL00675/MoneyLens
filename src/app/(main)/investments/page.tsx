@@ -56,6 +56,7 @@ export default function InvestmentsPage() {
   const [activeTab, setActiveTab] = useState<"ALL" | "MUTUAL_FUND" | "STOCK">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [perfTimeframe, setPerfTimeframe] = useState<"1D" | "ALL">("1D");
+  const [moversType, setMoversType] = useState<"GAINERS" | "LOSERS">("GAINERS");
 
   // Manual Add Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -551,81 +552,154 @@ export default function InvestmentsPage() {
             </div>
           </div>
 
-          {/* Top Performers / Portfolio Highlights Card */}
+          {/* Top Performers & Losers / Portfolio Movers Card */}
           <div className="lg:col-span-5 bg-white rounded-2xl border border-cream-300 p-5 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center justify-between pb-3 mb-2 border-b border-cream-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-2 border-b border-cream-200 gap-2">
               <div>
                 <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-gray-500 mb-0.5">
-                  {perfTimeframe === "1D" ? "Today's Movers" : "All-Time Returns"}
+                  {perfTimeframe === "1D" ? "Today's Movers" : "Portfolio Performance"}
                 </p>
                 <h3 className="text-base font-serif text-gray-900">
-                  {perfTimeframe === "1D" ? "Day's Top Performers" : "Top Performers"}
+                  {moversType === "GAINERS"
+                    ? perfTimeframe === "1D"
+                      ? "Day's Top Performers"
+                      : "Top Performers"
+                    : perfTimeframe === "1D"
+                    ? "Day's Top Losers"
+                    : "Top Declining"}
                 </h3>
               </div>
 
-              {/* Timeframe Pill Switcher */}
-              <div className="flex items-center bg-cream-100 p-0.5 rounded-lg border border-cream-300/60">
-                <button
-                  type="button"
-                  onClick={() => setPerfTimeframe("1D")}
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-default ${
-                    perfTimeframe === "1D"
-                      ? "bg-white text-navy-900 shadow-2xs"
-                      : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Day (1D)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPerfTimeframe("ALL")}
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-default ${
-                    perfTimeframe === "ALL"
-                      ? "bg-white text-navy-900 shadow-2xs"
-                      : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  All-Time
-                </button>
+              {/* Controls: Gainers / Losers + 1D / All-Time */}
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                {/* Gainers vs Losers Switcher */}
+                <div className="flex items-center bg-cream-100 p-0.5 rounded-lg border border-cream-300/60">
+                  <button
+                    type="button"
+                    onClick={() => setMoversType("GAINERS")}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-default ${
+                      moversType === "GAINERS"
+                        ? "bg-white text-forest-700 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <TrendingUp className="w-3 h-3 text-forest-600" />
+                    <span>Gainers</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMoversType("LOSERS")}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-default ${
+                      moversType === "LOSERS"
+                        ? "bg-white text-coral-700 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <TrendingDown className="w-3 h-3 text-coral-600" />
+                    <span>Losers</span>
+                  </button>
+                </div>
+
+                {/* Timeframe Switcher */}
+                <div className="flex items-center bg-cream-100 p-0.5 rounded-lg border border-cream-300/60">
+                  <button
+                    type="button"
+                    onClick={() => setPerfTimeframe("1D")}
+                    className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-default ${
+                      perfTimeframe === "1D"
+                        ? "bg-white text-navy-900 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    1D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPerfTimeframe("ALL")}
+                    className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-default ${
+                      perfTimeframe === "ALL"
+                        ? "bg-white text-navy-900 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    All-Time
+                  </button>
+                </div>
               </div>
             </div>
 
             {holdings.length > 0 ? (
-              <div className="divide-y divide-cream-100 my-auto">
-                {[...holdings]
-                  .sort((a: any, b: any) =>
-                    perfTimeframe === "1D"
-                      ? b.dayChangePercent - a.dayChangePercent
-                      : b.returnPercent - a.returnPercent
-                  )
-                  .slice(0, 3)
-                  .map((h: any) => {
-                    const isProfit = perfTimeframe === "1D" ? h.dayChange >= 0 : h.totalReturn >= 0;
-                    const amountValue = perfTimeframe === "1D" ? h.dayChange : h.totalReturn;
-                    const percentValue = perfTimeframe === "1D" ? h.dayChangePercent : h.returnPercent;
+              (() => {
+                const filtered = [...holdings].filter((h: any) => {
+                  const val = perfTimeframe === "1D" ? h.dayChange : h.totalReturn;
+                  return moversType === "GAINERS" ? val >= 0 : val < 0;
+                });
 
-                    return (
-                      <div key={h.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-gray-900 truncate" title={h.name}>
-                            {h.name}
-                          </p>
-                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">
-                            {h.symbol} · {h.assetType === "MUTUAL_FUND" ? "Mutual Fund" : h.assetType}
-                          </p>
+                const sorted = filtered
+                  .sort((a: any, b: any) => {
+                    if (moversType === "GAINERS") {
+                      return perfTimeframe === "1D"
+                        ? b.dayChangePercent - a.dayChangePercent
+                        : b.returnPercent - a.returnPercent;
+                    } else {
+                      // For losers, biggest drops first (e.g. -3.05% before -0.21%)
+                      return perfTimeframe === "1D"
+                        ? a.dayChangePercent - b.dayChangePercent
+                        : a.returnPercent - b.returnPercent;
+                    }
+                  })
+                  .slice(0, 3);
+
+                if (sorted.length === 0) {
+                  return (
+                    <div className="text-center py-6 text-gray-400 text-xs flex flex-col items-center justify-center gap-1.5 my-auto">
+                      {moversType === "LOSERS" ? (
+                        <>
+                          <span className="text-base">🎉</span>
+                          <p className="font-semibold text-gray-700">No declining assets!</p>
+                          <p className="text-[11px] text-gray-400">All holdings are currently positive.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold text-gray-700">No gaining assets</p>
+                          <p className="text-[11px] text-gray-400">All holdings are currently negative.</p>
+                        </>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="divide-y divide-cream-100 my-auto">
+                    {sorted.map((h: any) => {
+                      const isProfit = perfTimeframe === "1D" ? h.dayChange >= 0 : h.totalReturn >= 0;
+                      const amountValue = perfTimeframe === "1D" ? h.dayChange : h.totalReturn;
+                      const percentValue = perfTimeframe === "1D" ? h.dayChangePercent : h.returnPercent;
+
+                      return (
+                        <div key={h.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-gray-900 truncate" title={h.name}>
+                              {h.name}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                              {h.symbol} · {h.assetType === "MUTUAL_FUND" ? "Mutual Fund" : h.assetType}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className={`text-xs font-bold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                              {isProfit ? "+" : ""}{formatCurrency(amountValue)}
+                            </p>
+                            <p className={`text-[10px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                              {isProfit ? "+" : ""}{percentValue.toFixed(2)}%
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className={`text-xs font-bold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
-                            {isProfit ? "+" : ""}{formatCurrency(amountValue)}
-                          </p>
-                          <p className={`text-[10px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
-                            {isProfit ? "+" : ""}{percentValue.toFixed(2)}%
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             ) : (
               <div className="text-center py-6 text-gray-400 text-xs">
                 No performance data yet.
