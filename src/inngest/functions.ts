@@ -14,30 +14,51 @@ export const processRecurringTransactions = inngest.createFunction(
     ],
   },
   async ({ step }: any) => {
-    await step.run("find-and-process-recurring", async () => {
-      const now = new Date();
-      // Timezone-aware threshold: include transactions due today (up to +6 hours for IST offset)
-      const threshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+    const now = new Date();
+    // Timezone-aware threshold: include transactions due today (up to +6 hours for IST offset)
+    const threshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
 
-      // Find all due recurring transactions
-      const dueTransactions = await db.transaction.findMany({
+    // Step 1: Find all due recurring transactions
+    const dueTransactions = await step.run("find-due-recurring-transactions", async () => {
+      const txs = await db.transaction.findMany({
         where: {
           isRecurring: true,
           nextRecurringDate: { lte: threshold },
           status: "COMPLETED",
         },
-        include: { account: true },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          description: true,
+          category: true,
+          accountId: true,
+          userId: true,
+          recurringInterval: true,
+          nextRecurringDate: true,
+        },
       });
+      // Serialize Decimal/Date for Inngest's step result storage
+      return txs.map((tx) => ({
+        ...tx,
+        amount: tx.amount.toString(),
+        nextRecurringDate: tx.nextRecurringDate?.toISOString() ?? null,
+      }));
+    });
 
-      for (const tx of dueTransactions) {
-        // Scheduled recurring date for the new transaction
+    // Step 2: Process each recurring transaction in its own isolated step
+    // This gives per-transaction retry isolation and proper Inngest fan-out behaviour,
+    // so a failure in one transaction never blocks others.
+    for (const tx of dueTransactions) {
+      await step.run(`process-recurring-tx-${tx.id}`, async () => {
         const targetDate = tx.nextRecurringDate ? new Date(tx.nextRecurringDate) : now;
+        const amountNumber = parseFloat(tx.amount);
 
-        // Create new transaction
+        // Create the new (non-recurring) transaction entry
         await db.transaction.create({
           data: {
             type: tx.type,
-            amount: tx.amount,
+            amount: amountNumber,
             description: tx.description,
             date: targetDate,
             category: tx.category,
@@ -51,9 +72,7 @@ export const processRecurringTransactions = inngest.createFunction(
 
         // Update account balance
         const balanceChange =
-          tx.type === "INCOME"
-            ? tx.amount.toNumber()
-            : -tx.amount.toNumber();
+          tx.type === "INCOME" ? amountNumber : -amountNumber;
 
         await db.account.update({
           where: { id: tx.accountId },
@@ -61,7 +80,7 @@ export const processRecurringTransactions = inngest.createFunction(
         });
 
         // Calculate next recurring date using UTC methods to prevent timezone drift
-        const nextDate = new Date(tx.nextRecurringDate || now);
+        const nextDate = new Date(tx.nextRecurringDate ?? now);
         switch (tx.recurringInterval) {
           case "DAILY":
             nextDate.setUTCDate(nextDate.getUTCDate() + 1);
@@ -77,6 +96,7 @@ export const processRecurringTransactions = inngest.createFunction(
             break;
         }
 
+        // Advance the recurring template's next due date
         await db.transaction.update({
           where: { id: tx.id },
           data: {
@@ -84,10 +104,12 @@ export const processRecurringTransactions = inngest.createFunction(
             lastProcessed: now,
           },
         });
-      }
 
-      return { processed: dueTransactions.length };
-    });
+        return { txId: tx.id, nextRecurringDate: nextDate.toISOString() };
+      });
+    }
+
+    return { processed: dueTransactions.length };
   }
 );
 
