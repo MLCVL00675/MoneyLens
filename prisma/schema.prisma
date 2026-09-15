@@ -50,6 +50,66 @@ enum AssetType {
 
 // ─── Models ──────────────────────────────────────────────
 
+// ─── Net Worth Tracker Enums ─────────────────────────────
+
+enum FixedDepositType {
+  FD
+  RD
+}
+
+enum CompoundingFrequency {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  ANNUALLY
+}
+
+enum BondType {
+  CORPORATE
+  GOVERNMENT
+  MUNICIPAL
+}
+
+enum CouponFrequency {
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUALLY
+  ANNUALLY
+  ZERO_COUPON
+}
+
+enum GoldType {
+  PHYSICAL
+  DIGITAL
+  SOVEREIGN_GOLD_BOND
+  ETF
+}
+
+enum PropertyType {
+  PLOT
+  SELF_OCCUPIED
+  RENTAL
+  COMMERCIAL
+}
+
+enum RetirementAccountType {
+  EPF
+  PPF
+  NPS
+  VPF
+}
+
+enum LiabilityType {
+  HOME_LOAN
+  AUTO_LOAN
+  PERSONAL_LOAN
+  CREDIT_CARD
+  EDUCATION_LOAN
+  OTHER
+}
+
+// ─── Models ──────────────────────────────────────────────
+
 model User {
   id          String   @id @default(uuid())
   clerkUserId String   @unique
@@ -59,12 +119,21 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  accounts     Account[]
-  transactions Transaction[]
-  budget       Budget?
-  goals        Goal[]
-  categories   Category[]
-  investments  Investment[]
+  accounts          Account[]
+  transactions      Transaction[]
+  budget            Budget?
+  goals             Goal[]
+  categories        Category[]
+  investments       Investment[]
+  // Net Worth Tracker relations
+  fixedDeposits     FixedDeposit[]
+  bonds             Bond[]
+  sips              SIP[]
+  reits             REIT[]
+  goldHoldings      GoldHolding[]
+  retirementAccounts RetirementAccount[]
+  liabilities       Liability[]
+  realEstates       RealEstate[]
 
   @@index([clerkUserId])
 }
@@ -110,6 +179,15 @@ model Transaction {
   transferId        String?
   transferAccountId String?
 
+  // Net Worth Mappings (Loan & SIP)
+  expenseType       String?            @default("GENERAL") // "GENERAL" | "INVESTMENT" | "LOAN"
+  sipId             String?
+  sip               SIP?               @relation(fields: [sipId], references: [id], onDelete: SetNull)
+  liabilityId       String?
+  liability         Liability?         @relation(fields: [liabilityId], references: [id], onDelete: SetNull)
+  allottedUnits     Decimal?           @db.Decimal(18, 4)
+  allotmentNav      Decimal?           @db.Decimal(12, 4)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -125,6 +203,8 @@ model Transaction {
   @@index([userId])
   @@index([accountId])
   @@index([goalId])
+  @@index([sipId])
+  @@index([liabilityId])
   @@index([date])
   @@index([type])
   @@index([isRecurring, nextRecurringDate])
@@ -219,4 +299,194 @@ model Investment {
   @@index([userId])
   @@index([assetType])
   @@index([symbol])
+}
+
+// ─── Net Worth Tracker Models ────────────────────────────
+
+model FixedDeposit {
+  id                 String               @id @default(uuid())
+  fdType             FixedDepositType     @default(FD)
+  bankName           String
+  principalAmount    Decimal              @db.Decimal(14, 2)
+  interestRate       Decimal              @db.Decimal(6, 4)
+  compoundingFreq    CompoundingFrequency @default(QUARTERLY)
+  tenureMonths       Int
+  startDate          DateTime
+  maturityDate       DateTime
+  maturityValue      Decimal              @db.Decimal(14, 2)
+  currentValue       Decimal              @db.Decimal(14, 2)
+  monthlyInstallment Decimal?             @db.Decimal(12, 2)
+  notes              String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Bond {
+  id              String          @id @default(uuid())
+  name            String
+  bondType        BondType        @default(GOVERNMENT)
+  isin            String?
+  faceValue       Decimal         @db.Decimal(12, 2)
+  couponRate      Decimal         @db.Decimal(6, 4)
+  couponFrequency CouponFrequency @default(ANNUALLY)
+  purchasePrice   Decimal         @db.Decimal(12, 2)
+  quantity        Int             @default(1)
+  maturityYear    Int
+  currentPrice    Decimal?        @db.Decimal(12, 2)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SIP {
+  id             String    @id @default(uuid())
+  schemeName     String
+  schemeCode     String?
+  monthlyAmount  Decimal   @db.Decimal(12, 2)
+  startDate      DateTime
+  currentNAV     Decimal?  @db.Decimal(12, 4)
+  totalUnitsHeld Decimal?  @db.Decimal(18, 4)
+  totalInvested  Decimal   @db.Decimal(14, 2)
+  currentValue   Decimal?  @db.Decimal(14, 2)
+  stepUpRate     Decimal?  @db.Decimal(5, 2)
+  expectedReturn Decimal?  @db.Decimal(5, 2)
+  isActive       Boolean   @default(true)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model REIT {
+  id                String    @id @default(uuid())
+  name              String
+  symbol            String?
+  exchange          String?
+  units             Decimal   @db.Decimal(14, 4)
+  purchasePrice     Decimal   @db.Decimal(12, 2)
+  currentPrice      Decimal   @db.Decimal(12, 2)
+  distributionYield Decimal?  @db.Decimal(5, 2)
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model GoldHolding {
+  id              String    @id @default(uuid())
+  goldType        GoldType  @default(PHYSICAL)
+  weightGrams     Decimal?  @db.Decimal(10, 3)
+  units           Decimal?  @db.Decimal(14, 4)
+  purchasePrice   Decimal   @db.Decimal(12, 2)
+  currentSpotRate Decimal   @db.Decimal(12, 2)
+  purity          String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RetirementAccount {
+  id                   String                @id @default(uuid())
+  accountType          RetirementAccountType @default(EPF)
+  employeeContribution Decimal               @db.Decimal(12, 2)
+  employerContribution Decimal?              @db.Decimal(12, 2)
+  interestRate         Decimal               @db.Decimal(6, 4)
+  currentCorpus        Decimal               @db.Decimal(14, 2)
+  startDate            DateTime?
+  accountNumber        String?
+  notes                String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  userId        String
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions RetirementContribution[]
+
+  @@index([userId])
+}
+
+model RetirementContribution {
+  id                  String            @id @default(uuid())
+  retirementAccountId String
+  retirementAccount   RetirementAccount @relation(fields: [retirementAccountId], references: [id], onDelete: Cascade)
+  date                DateTime          @default(now())
+  monthYear           String            // e.g. "Sep 2026"
+  employeeShare       Decimal           @db.Decimal(12, 2)
+  employerShare       Decimal           @db.Decimal(12, 2) @default(0)
+  totalAmount         Decimal           @db.Decimal(12, 2)
+  source              String?           @default("MANUAL") // "MANUAL" | "SALARY_DEDUCTION"
+  notes               String?
+  createdAt           DateTime          @default(now())
+
+  @@index([retirementAccountId])
+}
+
+model Liability {
+  id                    String        @id @default(uuid())
+  liabilityType         LiabilityType @default(PERSONAL_LOAN)
+  lenderName            String
+  principalRemaining    Decimal       @db.Decimal(14, 2)
+  originalPrincipal     Decimal?      @db.Decimal(14, 2)
+  interestRate          Decimal       @db.Decimal(6, 4)
+  monthlyEMI            Decimal       @db.Decimal(12, 2)
+  remainingTenureMonths Int?
+  startDate             DateTime?
+  endDate               DateTime?
+  notes                 String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model RealEstate {
+  id               String       @id @default(uuid())
+  name             String
+  propertyType     PropertyType @default(SELF_OCCUPIED)
+  location         String?
+  areaSqFt         Decimal?     @db.Decimal(12, 2)
+  purchasePrice    Decimal      @db.Decimal(14, 2)
+  purchaseDate     DateTime
+  appreciationRate Decimal      @default(5.0) @db.Decimal(5, 2)
+  currentValuation Decimal      @db.Decimal(14, 2)
+  isRental         Boolean      @default(false)
+  monthlyRent      Decimal?     @db.Decimal(12, 2)
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

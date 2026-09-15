@@ -13,10 +13,13 @@ import {
   fetchAssetLiveQuote,
   ParsedHolding,
 } from "@/actions/investments";
+import { deleteSIP } from "@/actions/net-worth";
+import { AddEditAssetModal } from "@/components/net-worth/AddEditAssetModal";
 import { MarketSearchResult } from "@/lib/market-api";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { LoadingState } from "@/components/ui/loading-state";
+import { HoldingDetailsModal } from "@/components/investments/HoldingDetailsModal";
 import {
   TrendingUp,
   TrendingDown,
@@ -38,6 +41,8 @@ import {
   Building2,
   Coins,
   ChevronRight,
+  CalendarClock,
+  Calendar,
 } from "lucide-react";
 import {
   PieChart,
@@ -53,13 +58,23 @@ export default function InvestmentsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"ALL" | "MUTUAL_FUND" | "STOCK">("ALL");
+  const [activeTab, setActiveTab] = useState<"ALL" | "MUTUAL_FUND" | "STOCK" | "SIP">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [perfTimeframe, setPerfTimeframe] = useState<"1D" | "ALL">("1D");
   const [moversType, setMoversType] = useState<"GAINERS" | "LOSERS">("GAINERS");
 
+  // SIP Modal & Actions State
+  const [showSipModal, setShowSipModal] = useState(false);
+  const [selectedSipForEdit, setSelectedSipForEdit] = useState<any | null>(null);
+  const [deleteSipItem, setDeleteSipItem] = useState<any | null>(null);
+  const [deletingSip, setDeletingSip] = useState(false);
+
+  // Holding Detail Ledger Modal State
+  const [selectedHoldingId, setSelectedHoldingId] = useState<string | null>(null);
+
   // Manual Add Modal State
   const [showAddModal, setShowAddModal] = useState(false);
+
   const [assetSearch, setAssetSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MarketSearchResult[]>([]);
   const [searchingAssets, setSearchingAssets] = useState(false);
@@ -104,6 +119,16 @@ export default function InvestmentsPage() {
 
   useEffect(() => {
     loadData();
+    const handleOpenAdd = () => setShowAddModal(true);
+    const handleRefresh = () => loadData();
+    window.addEventListener("open-add-investment-modal", handleOpenAdd);
+    window.addEventListener("open-add-asset-modal", handleOpenAdd);
+    window.addEventListener("refresh-net-worth", handleRefresh);
+    return () => {
+      window.removeEventListener("open-add-investment-modal", handleOpenAdd);
+      window.removeEventListener("open-add-asset-modal", handleOpenAdd);
+      window.removeEventListener("refresh-net-worth", handleRefresh);
+    };
   }, [loadData]);
 
   // Live Asset Search Debounce (Server Action)
@@ -310,6 +335,22 @@ export default function InvestmentsPage() {
     }
   };
 
+  // Delete SIP Plan
+  const handleDeleteSip = async () => {
+    if (!deleteSipItem) return;
+    setDeletingSip(true);
+    try {
+      await deleteSIP(deleteSipItem.id);
+      toast.success("SIP plan removed");
+      setDeleteSipItem(null);
+      loadData();
+    } catch {
+      toast.error("Failed to delete SIP plan");
+    } finally {
+      setDeletingSip(false);
+    }
+  };
+
   if (loading) {
     return (
       <LoadingState
@@ -319,10 +360,11 @@ export default function InvestmentsPage() {
     );
   }
 
-  const { summary, assetAllocation, holdings } = data || {
-    summary: { totalInvested: 0, totalCurrentValue: 0, totalReturn: 0, totalReturnPercent: 0, totalDayChange: 0, holdingCount: 0 },
+  const { summary, assetAllocation, holdings, sips = [] } = data || {
+    summary: { totalInvested: 0, totalCurrentValue: 0, totalReturn: 0, totalReturnPercent: 0, totalDayChange: 0, holdingCount: 0, sipCount: 0, totalMonthlySip: 0 },
     assetAllocation: [],
     holdings: [],
+    sips: [],
   };
 
   const filteredHoldings = holdings.filter((h: any) => {
@@ -339,6 +381,18 @@ export default function InvestmentsPage() {
     return true;
   });
 
+  const filteredSips = sips.filter((s: any) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        (s.schemeName && s.schemeName.toLowerCase().includes(q)) ||
+        (s.schemeCode && s.schemeCode.toLowerCase().includes(q)) ||
+        (s.notes && s.notes.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
+
   return (
     <div className="max-w-[1200px] mx-auto space-y-6">
       {/* Page Header */}
@@ -349,7 +403,7 @@ export default function InvestmentsPage() {
           </p>
           <h1 className="text-3xl font-serif text-gray-900">Investments</h1>
           <p className="text-gray-500 text-sm mt-1">
-            Track Mutual Funds and Stocks with live AMFI NAVs and market updates.
+            Track Mutual Funds, Stocks, and active SIP mandates with live AMFI NAVs and market updates.
           </p>
         </div>
 
@@ -374,17 +428,58 @@ export default function InvestmentsPage() {
             <span>AI Import Statement</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              resetAddForm();
-              setShowAddModal(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-500 text-white text-xs sm:text-sm font-medium hover:bg-forest-600 transition-default shadow-2xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Asset</span>
-          </button>
+          {activeTab === "SIP" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedSipForEdit(null);
+                setShowSipModal(true);
+              }}
+              title="Set up a new monthly SIP mandate"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 text-white text-xs sm:text-sm font-medium hover:bg-forest-700 transition-default shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New SIP Plan</span>
+            </button>
+          ) : activeTab === "MUTUAL_FUND" ? (
+            <button
+              type="button"
+              onClick={() => {
+                resetAddForm();
+                setFormAssetType("MUTUAL_FUND");
+                setShowAddModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 text-white text-xs sm:text-sm font-medium hover:bg-forest-700 transition-default shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Mutual Fund</span>
+            </button>
+          ) : activeTab === "STOCK" ? (
+            <button
+              type="button"
+              onClick={() => {
+                resetAddForm();
+                setFormAssetType("STOCK");
+                setShowAddModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 text-white text-xs sm:text-sm font-medium hover:bg-forest-700 transition-default shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Stock / ETF</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                resetAddForm();
+                setShowAddModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 text-white text-xs sm:text-sm font-medium hover:bg-forest-700 transition-default shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Holding</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -713,7 +808,7 @@ export default function InvestmentsPage() {
       <div className="bg-white rounded-2xl border border-cream-300 overflow-hidden shadow-sm">
         {/* Filter Bar */}
         <div className="p-4 border-b border-cream-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-cream-50/40">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => setActiveTab("ALL")}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-default ${
@@ -744,6 +839,26 @@ export default function InvestmentsPage() {
             >
               Stocks &amp; ETFs ({holdings.filter((h: any) => h.assetType === "STOCK" || h.assetType === "ETF").length})
             </button>
+            <button
+              onClick={() => setActiveTab("SIP")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-default flex items-center gap-1.5 ${
+                activeTab === "SIP"
+                  ? "bg-navy-900 text-white"
+                  : "bg-white text-gray-600 hover:bg-cream-100 border border-cream-300"
+              }`}
+            >
+              <CalendarClock className="w-3.5 h-3.5" />
+              <span>SIP Plans</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  activeTab === "SIP"
+                    ? "bg-white/20 text-white"
+                    : "bg-forest-100 text-forest-700"
+                }`}
+              >
+                {sips.length}
+              </span>
+            </button>
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -752,202 +867,428 @@ export default function InvestmentsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search your holdings..."
+              placeholder={activeTab === "SIP" ? "Search your SIP plans..." : "Search your holdings..."}
               className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-cream-300 text-xs focus:outline-none focus:ring-1 focus:ring-forest-500 bg-white"
             />
           </div>
         </div>
 
-        {/* Holdings List Header (Desktop) */}
-        <div className="hidden md:grid md:grid-cols-[1.4fr_100px_100px_110px_120px_130px_70px] gap-3 px-5 py-3 border-b border-cream-200 text-[10px] font-semibold tracking-[0.1em] uppercase text-gray-500 bg-cream-50/30">
-          <div>Holding Name</div>
-          <div className="text-right">Units</div>
-          <div className="text-right">Avg Cost</div>
-          <div className="text-right">Live CMP / NAV</div>
-          <div className="text-right">Current Value</div>
-          <div className="text-right">Total Gain / Loss</div>
-          <div className="text-right">Actions</div>
-        </div>
+        {/* Mutual Fund SIP Connection Banner */}
+        {activeTab === "MUTUAL_FUND" && sips.length > 0 && (
+          <div className="mx-4 mt-3 mb-1 p-3 rounded-xl bg-forest-50/70 border border-forest-200/80 flex items-center justify-between text-xs text-forest-900">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="w-4 h-4 text-forest-600 shrink-0" />
+              <span>
+                <strong>{sips.length} Active SIP {sips.length === 1 ? "Mandate" : "Mandates"}</strong> committing{" "}
+                <strong>{formatCurrency(summary.totalMonthlySip)}/month</strong> towards your mutual funds.
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveTab("SIP")}
+              className="text-forest-700 hover:text-forest-900 font-semibold underline underline-offset-2 flex items-center gap-0.5 shrink-0"
+            >
+              <span>Manage SIPs</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
-        {/* Holdings Rows */}
-        {filteredHoldings.length > 0 ? (
-          <div className="divide-y divide-cream-200">
-            {filteredHoldings.map((h: any) => {
-              const isProfit = h.totalReturn >= 0;
-              const isDayProfit = h.dayChange >= 0;
+        {/* SIP Plans View */}
+        {activeTab === "SIP" ? (
+          <div>
+            {/* SIP Header Info */}
+            <div className="px-5 py-3 border-b border-cream-200 bg-cream-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-forest-100 text-forest-800">
+                  MF SIP Mandates
+                </span>
+                <p className="text-xs text-gray-500">
+                  SIP is a systematic periodic investment under Mutual Funds. Each debit accumulates directly into your MF portfolio.
+                </p>
+              </div>
+              <div className="text-xs text-gray-700 shrink-0 font-medium">
+                Total Monthly Inflow: <strong className="text-forest-700 font-bold">{formatCurrency(summary.totalMonthlySip)}</strong>
+              </div>
+            </div>
 
-              return (
-                <div
-                  key={h.id}
-                  className="p-4 sm:px-5 sm:py-3.5 hover:bg-cream-50/60 transition-default"
-                >
-                  {/* Desktop Tabular Grid */}
-                  <div className="hidden md:grid md:grid-cols-[1.4fr_100px_100px_110px_120px_130px_70px] gap-3 items-center">
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                            h.assetType === "MUTUAL_FUND"
-                              ? "bg-forest-500/10 text-forest-700"
-                              : h.assetType === "ETF"
-                              ? "bg-purple-500/10 text-purple-700"
-                              : "bg-blue-500/10 text-blue-700"
-                          }`}
-                        >
-                          {h.assetType === "MUTUAL_FUND" ? "MF" : h.assetType}
-                        </span>
-                        <h4 className="text-sm font-semibold text-gray-900 truncate" title={h.name}>
-                          {h.name}
-                        </h4>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-                        {h.symbol && <span className="font-mono text-gray-500">{h.symbol}</span>}
-                        {h.category && <span> · {h.category}</span>}
-                        {h.folioOrAccount && <span> · Folio: {h.folioOrAccount}</span>}
-                      </p>
-                    </div>
+            {/* SIP Table Header (Desktop) */}
+            <div className="hidden md:grid md:grid-cols-[1.5fr_130px_130px_110px_130px_80px_70px] gap-3 px-5 py-3 border-b border-cream-200 text-[10px] font-semibold tracking-[0.1em] uppercase text-gray-500 bg-cream-50/30">
+              <div>Scheme Name</div>
+              <div className="text-right">Monthly Amount</div>
+              <div className="text-right">Debit Schedule</div>
+              <div className="text-right">Live NAV</div>
+              <div className="text-right">Accumulated / Units</div>
+              <div className="text-center">Status</div>
+              <div className="text-right">Actions</div>
+            </div>
 
-                    <div className="text-right text-sm font-medium text-gray-800">
-                      {h.units.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                    </div>
+            {/* SIP Rows */}
+            {filteredSips.length > 0 ? (
+              <div className="divide-y divide-cream-200">
+                {filteredSips.map((s: any) => {
+                  const debitDay = s.startDate ? new Date(s.startDate).getDate() : 1;
+                  return (
+                    <div
+                      key={s.id}
+                      className="p-4 sm:px-5 sm:py-3.5 hover:bg-cream-50/80 transition-default group"
+                    >
+                      {/* Desktop Row */}
+                      <div className="hidden md:grid md:grid-cols-[1.5fr_130px_130px_110px_130px_80px_70px] gap-3 items-center">
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-forest-500/10 text-forest-700">
+                              SIP
+                            </span>
+                            <h4 className="text-sm font-semibold text-gray-900 truncate" title={s.schemeName}>
+                              {s.schemeName}
+                            </h4>
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                            {s.schemeCode && <span className="font-mono text-gray-500">Code: {s.schemeCode}</span>}
+                            {s.notes && <span> · {s.notes}</span>}
+                          </p>
+                        </div>
 
-                    <div className="text-right text-sm text-gray-600">
-                      {formatCurrency(h.buyPrice)}
-                    </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900">{formatCurrency(s.monthlyAmount)}</p>
+                          <p className="text-[10px] text-gray-400">per month</p>
+                        </div>
 
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{formatCurrency(h.currentPrice)}</p>
-                      {h.dayChangePercent !== 0 && (
-                        <p className={`text-[10px] font-semibold ${isDayProfit ? "text-forest-600" : "text-coral-600"}`}>
-                          {isDayProfit ? "+" : ""}{h.dayChangePercent.toFixed(2)}%
-                        </p>
-                      )}
-                    </div>
+                        <div className="text-right text-xs font-medium text-gray-700">
+                          Day {debitDay} of month
+                        </div>
 
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{formatCurrency(h.currentValue)}</p>
-                      <p className="text-[10px] text-gray-400">Inv: {formatCurrency(h.investedAmount)}</p>
-                    </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900">
+                            {s.currentNAV ? formatCurrency(s.currentNAV) : "—"}
+                          </p>
+                          <p className="text-[10px] text-gray-400">AMFI NAV</p>
+                        </div>
 
-                    <div className="text-right">
-                      <p className={`text-sm font-bold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
-                        {isProfit ? "+" : ""}{formatCurrency(h.totalReturn)}
-                      </p>
-                      <p className={`text-[10px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
-                        {isProfit ? "+" : ""}{h.returnPercent.toFixed(2)}%
-                      </p>
-                    </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900">{formatCurrency(s.totalInvested || 0)}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {s.totalUnitsHeld ? `${s.totalUnitsHeld.toFixed(3)} units` : "Under MF Holdings"}
+                          </p>
+                        </div>
 
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => {
-                          setEditHolding(h);
-                          setEditUnits(String(h.units));
-                          setEditBuyPrice(String(h.buyPrice));
-                          setEditFolio(h.folioOrAccount || "");
-                        }}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-navy-900 hover:bg-cream-100 transition-default"
-                        title="Edit holding"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteHoldingItem(h)}
-                        className="p-1.5 rounded-lg text-gray-300 hover:text-coral-500 hover:bg-coral-50 transition-default"
-                        title="Delete holding"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Mobile Card View */}
-                  <div className="flex md:hidden flex-col gap-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="text-center">
                           <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                              h.assetType === "MUTUAL_FUND"
-                                ? "bg-forest-500/10 text-forest-700"
-                                : "bg-blue-500/10 text-blue-700"
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              s.isActive
+                                ? "bg-forest-100 text-forest-700"
+                                : "bg-gray-100 text-gray-500"
                             }`}
                           >
-                            {h.assetType === "MUTUAL_FUND" ? "MF" : h.assetType}
+                            {s.isActive ? "Active" : "Paused"}
                           </span>
-                          <h4 className="text-sm font-semibold text-gray-900 truncate">
-                            {h.name}
-                          </h4>
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {h.units.toLocaleString(undefined, { maximumFractionDigits: 4 })} units @ {formatCurrency(h.buyPrice)}
-                        </p>
+
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => {
+                              setSelectedSipForEdit(s);
+                              setShowSipModal(true);
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-navy-900 hover:bg-cream-100 transition-default"
+                            title="Edit SIP Plan"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteSipItem(s)}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-coral-500 hover:bg-coral-50 transition-default"
+                            title="Delete SIP Plan"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-gray-900">{formatCurrency(h.currentValue)}</p>
-                        <p className={`text-[11px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
-                          {isProfit ? "+" : ""}{formatCurrency(h.totalReturn)} ({h.returnPercent.toFixed(1)}%)
-                        </p>
+                      {/* Mobile Row */}
+                      <div className="flex md:hidden flex-col gap-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-forest-500/10 text-forest-700">
+                                SIP
+                              </span>
+                              <h4 className="text-sm font-semibold text-gray-900 truncate">
+                                {s.schemeName}
+                              </h4>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              Debit Day: {debitDay} · NAV: {s.currentNAV ? formatCurrency(s.currentNAV) : "—"}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-bold text-gray-900">{formatCurrency(s.monthlyAmount)}</p>
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                                s.isActive ? "bg-forest-100 text-forest-700" : "bg-gray-100 text-gray-500"
+                              }`}
+                            >
+                              {s.isActive ? "Active" : "Paused"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-cream-200 text-xs text-gray-500">
+                          <div>
+                            <span>Total Invested: </span>
+                            <strong className="text-gray-900">{formatCurrency(s.totalInvested || 0)}</strong>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedSipForEdit(s);
+                                setShowSipModal(true);
+                              }}
+                              className="p-1 rounded text-gray-500 hover:text-navy-900"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteSipItem(s)}
+                              className="p-1 rounded text-gray-400 hover:text-coral-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-cream-200 text-xs text-gray-500">
-                      <div>
-                        <span>Live NAV/CMP: </span>
-                        <strong className="text-gray-900">{formatCurrency(h.currentPrice)}</strong>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditHolding(h);
-                            setEditUnits(String(h.units));
-                            setEditBuyPrice(String(h.buyPrice));
-                            setEditFolio(h.folioOrAccount || "");
-                          }}
-                          className="p-1 rounded text-gray-500 hover:text-navy-900"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteHoldingItem(h)}
-                          className="p-1 rounded text-gray-400 hover:text-coral-500"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-16 text-center text-gray-400 text-sm">
+                <div className="w-12 h-12 rounded-2xl bg-cream-100 flex items-center justify-center mx-auto mb-3">
+                  <CalendarClock className="w-5 h-5 text-forest-600" />
                 </div>
-              );
-            })}
+                <p className="font-serif text-base text-gray-700 mb-1">No SIP plans configured</p>
+                <p className="text-xs text-gray-400 mb-4 max-w-md mx-auto">
+                  Set up monthly SIP plans for your mutual funds. SIPs serve as templates when recording your monthly investment transactions.
+                </p>
+                <button
+                  onClick={() => {
+                    setSelectedSipForEdit(null);
+                    setShowSipModal(true);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-forest-500 text-white text-xs font-medium hover:bg-forest-600 transition-default inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add New SIP Plan</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="p-16 text-center text-gray-400 text-sm">
-            <div className="w-12 h-12 rounded-2xl bg-cream-100 flex items-center justify-center mx-auto mb-3">
-              <Coins className="w-5 h-5 text-gray-400" />
+          <div>
+            {/* Holdings List Header (Desktop) */}
+            <div className="hidden md:grid md:grid-cols-[1.4fr_100px_100px_110px_120px_130px_70px] gap-3 px-5 py-3 border-b border-cream-200 text-[10px] font-semibold tracking-[0.1em] uppercase text-gray-500 bg-cream-50/30">
+              <div>Holding Name</div>
+              <div className="text-right">Units</div>
+              <div className="text-right">Avg Cost</div>
+              <div className="text-right">Live CMP / NAV</div>
+              <div className="text-right">Current Value</div>
+              <div className="text-right">Total Gain / Loss</div>
+              <div className="text-right">Actions</div>
             </div>
-            <p className="font-serif text-base text-gray-700 mb-1">No investment holdings found</p>
-            <p className="text-xs text-gray-400 mb-4">
-              Add your mutual funds or stocks, or import an account statement.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="px-4 py-2 rounded-xl bg-navy-900 text-white text-xs font-medium hover:bg-navy-800 transition-default flex items-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-gold-400" />
-                <span>AI Statement Import</span>
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="px-4 py-2 rounded-xl bg-forest-500 text-white text-xs font-medium hover:bg-forest-600 transition-default flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Asset Manually</span>
-              </button>
-            </div>
+
+            {/* Holdings Rows */}
+            {filteredHoldings.length > 0 ? (
+              <div className="divide-y divide-cream-200">
+                {filteredHoldings.map((h: any) => {
+                  const isProfit = h.totalReturn >= 0;
+                  const isDayProfit = h.dayChange >= 0;
+
+                  return (
+                    <div
+                      key={h.id}
+                      onClick={() => setSelectedHoldingId(h.id)}
+                      className="p-4 sm:px-5 sm:py-3.5 hover:bg-cream-50/80 transition-default cursor-pointer group"
+                    >
+                      {/* Desktop Tabular Grid */}
+                      <div className="hidden md:grid md:grid-cols-[1.4fr_100px_100px_110px_120px_130px_70px] gap-3 items-center">
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                h.assetType === "MUTUAL_FUND"
+                                  ? "bg-forest-500/10 text-forest-700"
+                                  : h.assetType === "ETF"
+                                  ? "bg-purple-500/10 text-purple-700"
+                                  : "bg-blue-500/10 text-blue-700"
+                              }`}
+                            >
+                              {h.assetType === "MUTUAL_FUND" ? "MF" : h.assetType}
+                            </span>
+                            <h4 className="text-sm font-semibold text-gray-900 truncate group-hover:text-forest-700 transition-colors flex items-center gap-1.5" title={h.name}>
+                              {h.name}
+                              <ChevronRight className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                            </h4>
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                            {h.symbol && <span className="font-mono text-gray-500">{h.symbol}</span>}
+                            {h.category && <span> · {h.category}</span>}
+                            {h.folioOrAccount && <span> · Folio: {h.folioOrAccount}</span>}
+                          </p>
+                        </div>
+
+                        <div className="text-right text-sm font-medium text-gray-800">
+                          {h.units.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </div>
+
+                        <div className="text-right text-sm text-gray-600">
+                          {formatCurrency(h.buyPrice)}
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900">{formatCurrency(h.currentPrice)}</p>
+                          {h.dayChangePercent !== 0 && (
+                            <p className={`text-[10px] font-semibold ${isDayProfit ? "text-forest-600" : "text-coral-600"}`}>
+                              {isDayProfit ? "+" : ""}{h.dayChangePercent.toFixed(2)}%
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900">{formatCurrency(h.currentValue)}</p>
+                          <p className="text-[10px] text-gray-400">Inv: {formatCurrency(h.investedAmount)}</p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                            {isProfit ? "+" : ""}{formatCurrency(h.totalReturn)}
+                          </p>
+                          <p className={`text-[10px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                            {isProfit ? "+" : ""}{h.returnPercent.toFixed(2)}%
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditHolding(h);
+                              setEditUnits(String(h.units));
+                              setEditBuyPrice(String(h.buyPrice));
+                              setEditFolio(h.folioOrAccount || "");
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-navy-900 hover:bg-cream-100 transition-default"
+                            title="Edit holding"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteHoldingItem(h);
+                            }}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-coral-500 hover:bg-coral-50 transition-default"
+                            title="Delete holding"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="flex md:hidden flex-col gap-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                  h.assetType === "MUTUAL_FUND"
+                                    ? "bg-forest-500/10 text-forest-700"
+                                    : "bg-blue-500/10 text-blue-700"
+                                }`}
+                              >
+                                {h.assetType === "MUTUAL_FUND" ? "MF" : h.assetType}
+                              </span>
+                              <h4 className="text-sm font-semibold text-gray-900 truncate flex items-center gap-1">
+                                {h.name}
+                                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                              </h4>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              {h.units.toLocaleString(undefined, { maximumFractionDigits: 4 })} units @ {formatCurrency(h.buyPrice)}
+                            </p>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-bold text-gray-900">{formatCurrency(h.currentValue)}</p>
+                            <p className={`text-[11px] font-semibold ${isProfit ? "text-forest-600" : "text-coral-600"}`}>
+                              {isProfit ? "+" : ""}{formatCurrency(h.totalReturn)} ({h.returnPercent.toFixed(1)}%)
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-cream-200 text-xs text-gray-500">
+                          <div>
+                            <span>Live NAV/CMP: </span>
+                            <strong className="text-gray-900">{formatCurrency(h.currentPrice)}</strong>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditHolding(h);
+                                setEditUnits(String(h.units));
+                                setEditBuyPrice(String(h.buyPrice));
+                                setEditFolio(h.folioOrAccount || "");
+                              }}
+                              className="p-1 rounded text-gray-500 hover:text-navy-900"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteHoldingItem(h);
+                              }}
+                              className="p-1 rounded text-gray-400 hover:text-coral-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-16 text-center text-gray-400 text-sm">
+                <div className="w-12 h-12 rounded-2xl bg-cream-100 flex items-center justify-center mx-auto mb-3">
+                  <Coins className="w-5 h-5 text-gray-400" />
+                </div>
+                <p className="font-serif text-base text-gray-700 mb-1">No investment holdings found</p>
+                <p className="text-xs text-gray-400 mb-4">
+                  Add your mutual funds or stocks, or import an account statement.
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="px-4 py-2 rounded-xl bg-navy-900 text-white text-xs font-medium hover:bg-navy-800 transition-default flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-gold-400" />
+                    <span>AI Statement Import</span>
+                  </button>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="px-4 py-2 rounded-xl bg-forest-500 text-white text-xs font-medium hover:bg-forest-600 transition-default flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Asset Manually</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1375,6 +1716,70 @@ export default function InvestmentsPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Holding Detail Ledger & Allotment History Modal ──────────────── */}
+      <HoldingDetailsModal
+        holdingId={selectedHoldingId}
+        onClose={() => setSelectedHoldingId(null)}
+        onEdit={(h) => {
+          setEditHolding(h);
+          setEditUnits(String(h.units));
+          setEditBuyPrice(String(h.buyPrice));
+          setEditFolio(h.folioOrAccount || "");
+        }}
+      />
+
+      {/* ─── Add / Edit SIP Plan Modal ─────────────────────────────────────── */}
+      {showSipModal && (
+        <AddEditAssetModal
+          isOpen={showSipModal}
+          onClose={() => {
+            setShowSipModal(false);
+            setSelectedSipForEdit(null);
+          }}
+          onSuccess={() => {
+            setShowSipModal(false);
+            setSelectedSipForEdit(null);
+            loadData();
+          }}
+          initialCategory="SIP"
+          initialData={selectedSipForEdit}
+        />
+      )}
+
+      {/* ─── Delete SIP Confirm Modal ──────────────────────────────────────── */}
+      {deleteSipItem && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-scale-in text-gray-900 shadow-xl">
+            <div className="w-10 h-10 rounded-xl bg-coral-50 text-coral-600 flex items-center justify-center mb-3">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-serif text-gray-900 mb-1">Remove SIP Plan?</h3>
+            <p className="text-xs text-gray-500 mb-5 leading-relaxed">
+              Are you sure you want to remove the SIP plan for <strong>{deleteSipItem.schemeName}</strong>? This will not delete your past recorded transaction history.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteSipItem(null)}
+                className="flex-1 py-2 rounded-xl border border-cream-300 text-xs font-medium text-gray-700 hover:bg-cream-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSip}
+                disabled={deletingSip}
+                className="flex-1 py-2 rounded-xl bg-coral-600 text-white text-xs font-medium hover:bg-coral-700 transition-default disabled:opacity-50"
+              >
+                {deletingSip ? "Deleting..." : "Yes, Remove"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+

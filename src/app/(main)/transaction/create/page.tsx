@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createTransaction, scanReceipt } from "@/actions/transaction";
 import { getAccounts } from "@/actions/account";
 import { getCategories, createCategory, deleteCategory } from "@/actions/category";
+import { getNetWorthHoldingsForTransaction } from "@/actions/net-worth";
 import { formatCurrency, getLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -18,6 +19,10 @@ import {
   Plus,
   Trash2,
   Settings2,
+  TrendingUp,
+  Building2,
+  CreditCard,
+  Info,
 } from "lucide-react";
 import { BarLoader } from "react-spinners";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -29,6 +34,8 @@ export default function CreateTransactionPage() {
   const router = useRouter();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [sips, setSips] = useState<any[]>([]);
+  const [liabilities, setLiabilities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,6 +49,13 @@ export default function CreateTransactionPage() {
   const [transferAccountId, setTransferAccountId] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringInterval, setRecurringInterval] = useState<string>("");
+
+  // Net Worth Mappings (Loan & SIP)
+  const [expenseType, setExpenseType] = useState<"GENERAL" | "INVESTMENT" | "LOAN">("GENERAL");
+  const [selectedSipId, setSelectedSipId] = useState("");
+  const [selectedLiabilityId, setSelectedLiabilityId] = useState("");
+  const [allotmentNav, setAllotmentNav] = useState("");
+  const [allottedUnits, setAllottedUnits] = useState("");
 
   // Receipt scanner state
   const [scanning, setScanning] = useState(false);
@@ -58,13 +72,16 @@ export default function CreateTransactionPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [accs, cats] = await Promise.all([
+        const [accs, cats, nwHoldings] = await Promise.all([
           getAccounts(),
           getCategories(),
+          getNetWorthHoldingsForTransaction().catch(() => ({ sips: [], liabilities: [] })),
         ]);
         const activeAccs = accs.filter((a: any) => !a.isDecommissioned);
         setAccounts(activeAccs);
         setCategories(cats);
+        setSips(nwHoldings.sips || []);
+        setLiabilities(nwHoldings.liabilities || []);
         if (activeAccs.length > 0) {
           const defaultAcc = activeAccs.find((a: any) => a.isDefault) || activeAccs[0];
           setAccountId(defaultAcc.id);
@@ -77,6 +94,7 @@ export default function CreateTransactionPage() {
     };
     load();
   }, []);
+
 
   const handleScanReceipt = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
@@ -161,6 +179,108 @@ export default function CreateTransactionPage() {
     }
   };
 
+  const handleExpenseTypeSelect = (newType: "GENERAL" | "INVESTMENT" | "LOAN") => {
+    setExpenseType(newType);
+    if (newType === "GENERAL") {
+      setSelectedSipId("");
+      setSelectedLiabilityId("");
+      setAllotmentNav("");
+      setAllottedUnits("");
+      setCategory("");
+    } else if (newType === "INVESTMENT") {
+      setSelectedLiabilityId("");
+      setCategory("Investment");
+      if (sips.length > 0) {
+        handleSipSelect(sips[0].id);
+      }
+    } else if (newType === "LOAN") {
+      setSelectedSipId("");
+      setAllotmentNav("");
+      setAllottedUnits("");
+      setCategory("Debt & Loans");
+      if (liabilities.length > 0) {
+        handleLiabilitySelect(liabilities[0].id);
+      }
+    }
+  };
+
+  const handleSipSelect = (sipId: string, customList?: any[]) => {
+    setSelectedSipId(sipId);
+    if (!sipId) {
+      setAllotmentNav("");
+      setAllottedUnits("");
+      return;
+    }
+    const list = customList && customList.length > 0 ? customList : sips;
+    const sip = list.find((s: any) => s.id === sipId);
+    if (sip) {
+      setDescription(`${sip.schemeName} SIP`);
+      const monthly = Number(sip.monthlyAmount) || 0;
+      setAmount(monthly > 0 ? String(monthly) : "");
+      const navVal = sip.currentNAV && Number(sip.currentNAV) > 0 ? String(sip.currentNAV) : "";
+      setAllotmentNav(navVal);
+      if (monthly > 0 && Number(navVal) > 0) {
+        setAllottedUnits((monthly / Number(navVal)).toFixed(4));
+      } else {
+        setAllottedUnits("");
+      }
+      setCategory("Investment");
+    }
+  };
+
+  const handleLiabilitySelect = (liabilityId: string, customList?: any[]) => {
+    setSelectedLiabilityId(liabilityId);
+    if (!liabilityId) return;
+    const list = customList && customList.length > 0 ? customList : liabilities;
+    const liability = list.find((l: any) => l.id === liabilityId);
+    if (liability) {
+      const typeLabel = liability.liabilityType.replace(/_/g, " ");
+      setDescription(`${liability.lenderName} ${typeLabel} EMI`);
+      const emi = Number(liability.monthlyEMI) || 0;
+      setAmount(emi > 0 ? String(emi) : "");
+      setCategory("Debt & Loans");
+    }
+  };
+
+  const handleAmountChange = (newAmount: string) => {
+    setAmount(newAmount);
+    if (type === "EXPENSE" && expenseType === "INVESTMENT") {
+      const amt = parseFloat(newAmount);
+      const nav = parseFloat(allotmentNav);
+      if (amt > 0 && nav > 0) {
+        setAllottedUnits((amt / nav).toFixed(4));
+      } else if (!newAmount || amt <= 0) {
+        setAllottedUnits("");
+      }
+    }
+  };
+
+  const handleNavChange = (newNav: string) => {
+    setAllotmentNav(newNav);
+    const amt = parseFloat(amount);
+    const nav = parseFloat(newNav);
+    if (amt > 0 && nav > 0) {
+      setAllottedUnits((amt / nav).toFixed(4));
+    } else if (!newNav || nav <= 0) {
+      setAllottedUnits("");
+    }
+  };
+
+  const handleUnitsChange = (newUnits: string) => {
+    setAllottedUnits(newUnits);
+    const u = parseFloat(newUnits);
+    const nav = parseFloat(allotmentNav);
+    const amt = parseFloat(amount);
+    if (u > 0 && nav > 0) {
+      // Recalculate amount if NAV is known
+      setAmount((u * nav).toFixed(2));
+    } else if (u > 0 && amt > 0) {
+      setAllotmentNav((amt / u).toFixed(4));
+    } else if (!newUnits || u <= 0) {
+      // Keep amount as is, or do not force
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -176,7 +296,27 @@ export default function CreateTransactionPage() {
       toast.error("Please select an account");
       return;
     }
-    if (!category && type !== "TRANSFER") {
+
+    if (type === "EXPENSE" && expenseType === "LOAN" && liabilities.length > 0 && !selectedLiabilityId) {
+      toast.error("Please select which loan you are paying");
+      return;
+    }
+
+    if (type === "EXPENSE" && expenseType === "INVESTMENT" && sips.length > 0 && !selectedSipId) {
+      toast.error("Please select which SIP you are investing in");
+      return;
+    }
+
+    const effectiveCategory =
+      type === "TRANSFER"
+        ? "Transfer"
+        : expenseType === "INVESTMENT"
+        ? category || "Investment"
+        : expenseType === "LOAN"
+        ? category || "Debt & Loans"
+        : category;
+
+    if (!effectiveCategory && type !== "TRANSFER") {
       toast.error("Please select a category");
       return;
     }
@@ -207,16 +347,31 @@ export default function CreateTransactionPage() {
         amount: parsedAmount,
         description: description.trim(),
         date,
-        category: type === "TRANSFER" ? "Transfer" : category,
+        category: effectiveCategory,
         accountId,
         isRecurring,
         recurringInterval: isRecurring ? (recurringInterval as any) : undefined,
         transferAccountId: type === "TRANSFER" ? transferAccountId : undefined,
+        expenseType: type === "EXPENSE" ? expenseType : "GENERAL",
+        sipId: type === "EXPENSE" && expenseType === "INVESTMENT" ? selectedSipId || undefined : undefined,
+        liabilityId: type === "EXPENSE" && expenseType === "LOAN" ? selectedLiabilityId || undefined : undefined,
+        allottedUnits:
+          type === "EXPENSE" && expenseType === "INVESTMENT" && allottedUnits
+            ? parseFloat(allottedUnits)
+            : undefined,
+        allotmentNav:
+          type === "EXPENSE" && expenseType === "INVESTMENT" && allotmentNav
+            ? parseFloat(allotmentNav)
+            : undefined,
       });
 
       toast.success(
         type === "TRANSFER"
           ? "Transfer completed"
+          : expenseType === "INVESTMENT"
+          ? "SIP Investment recorded & units credited!"
+          : expenseType === "LOAN"
+          ? "Loan EMI recorded & debt amortized!"
           : `${type === "INCOME" ? "Income" : "Expense"} recorded`
       );
       router.push("/dashboard");
@@ -352,6 +507,13 @@ export default function CreateTransactionPage() {
                 onClick={() => {
                   setType(t);
                   setCategory("");
+                  if (t !== "EXPENSE") {
+                    setExpenseType("GENERAL");
+                    setSelectedSipId("");
+                    setSelectedLiabilityId("");
+                    setAllotmentNav("");
+                    setAllottedUnits("");
+                  }
                 }}
                 className={`py-2 rounded-md text-sm font-medium transition-default ${
                   type === t
@@ -368,6 +530,267 @@ export default function CreateTransactionPage() {
             ))}
           </div>
         </div>
+
+        {/* Expense Classification & Direct Net Worth Mapping */}
+        {type === "EXPENSE" && (
+          <div className="space-y-3.5 p-4 bg-cream-50/80 border border-cream-300 rounded-xl">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                Expense Purpose / Mapping
+              </label>
+              <span className="text-[11px] text-gray-500">
+                {expenseType === "INVESTMENT"
+                  ? "Units allotted & live portfolio updated"
+                  : expenseType === "LOAN"
+                  ? "Reduces debt principal & remaining tenure"
+                  : "Standard expense category tracking"}
+              </span>
+            </div>
+
+            {/* Classification Segmented Tabs */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleExpenseTypeSelect("GENERAL")}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                  expenseType === "GENERAL"
+                    ? "bg-white text-gray-900 border-gray-400 shadow-sm font-semibold ring-1 ring-gray-400"
+                    : "bg-transparent text-gray-600 border-cream-300 hover:bg-cream-100"
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5 text-gray-500" />
+                <span>General Expense</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExpenseTypeSelect("INVESTMENT")}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                  expenseType === "INVESTMENT"
+                    ? "bg-forest-600 text-white border-forest-700 shadow-sm font-semibold"
+                    : "bg-transparent text-gray-600 border-cream-300 hover:bg-cream-100"
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-200" />
+                <span>Investment / SIP</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExpenseTypeSelect("LOAN")}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                  expenseType === "LOAN"
+                    ? "bg-navy-900 text-white border-navy-800 shadow-sm font-semibold"
+                    : "bg-transparent text-gray-600 border-cream-300 hover:bg-cream-100"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5 text-blue-200" />
+                <span>Loan / Debt EMI</span>
+              </button>
+            </div>
+
+            {/* Context-Sensitive Section: LOAN */}
+            {expenseType === "LOAN" && (
+              <div className="pt-3 border-t border-cream-200 space-y-2.5">
+                <label className="block text-xs font-medium text-gray-700">
+                  Select Loan to Repay <span className="text-coral-500">*</span>
+                </label>
+                {liabilities.length === 0 ? (
+                  <div className="p-3 bg-white border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-between">
+                    <span>No active loans found in your Net Worth tracker.</span>
+                    <Link href="/net-worth" className="text-forest-600 font-semibold underline ml-2">
+                      Add Loan in Net Worth →
+                    </Link>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedLiabilityId}
+                    onChange={(e) => handleLiabilitySelect(e.target.value)}
+                    className="w-full px-3 py-2 border border-cream-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-900 focus:border-transparent font-medium"
+                  >
+                    <option value="">-- Choose Loan / Liability --</option>
+                    {liabilities.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.lenderName} ({l.liabilityType.replace(/_/g, " ")}) — EMI: ₹{l.monthlyEMI.toLocaleString("en-IN")} | Principal Bal: ₹{l.principalRemaining.toLocaleString("en-IN")}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {(() => {
+                  const selectedLiability = liabilities.find((l) => l.id === selectedLiabilityId);
+                  if (!selectedLiability) return null;
+                  const amt = parseFloat(amount || "0");
+                  const monthlyInterest = (selectedLiability.principalRemaining * (selectedLiability.interestRate / 100)) / 12;
+                  const principalPaid = Math.max(0, Math.min(selectedLiability.principalRemaining, amt - monthlyInterest));
+
+                  return (
+                    <div className="p-3.5 bg-white border border-navy-100 rounded-lg text-xs text-gray-700 space-y-2.5 shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-cream-200 pb-2">
+                        <span className="font-semibold text-navy-900">{selectedLiability.lenderName} ({selectedLiability.liabilityType.replace(/_/g, " ")})</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAmount(String(selectedLiability.monthlyEMI));
+                              toast.success(`Filled monthly EMI: ₹${selectedLiability.monthlyEMI.toLocaleString("en-IN")}`);
+                            }}
+                            className="text-[11px] font-semibold text-navy-700 bg-navy-50 hover:bg-navy-100 border border-navy-200 px-2.5 py-0.5 rounded transition-colors"
+                          >
+                            Fill EMI: ₹{selectedLiability.monthlyEMI.toLocaleString("en-IN")}
+                          </button>
+                          <span className="text-gray-500">Rate: <strong>{selectedLiability.interestRate}% p.a.</strong></span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between text-gray-600">
+                        <span>Current Outstanding: <strong className="text-navy-900">₹{selectedLiability.principalRemaining.toLocaleString("en-IN")}</strong></span>
+                        {selectedLiability.remainingTenureMonths && (
+                          <span>Tenure: <strong>{selectedLiability.remainingTenureMonths} mos remaining</strong></span>
+                        )}
+                      </div>
+                      {amt > 0 && (
+                        <div className="mt-2 pt-2 border-t border-cream-200 text-[11px] text-navy-800 flex items-center justify-between">
+                          <span>Est. Principal Reduction: <strong className="text-forest-600">₹{Math.round(principalPaid).toLocaleString("en-IN")}</strong></span>
+                          <span>Est. Interest: <strong className="text-coral-600">₹{Math.round(monthlyInterest).toLocaleString("en-IN")}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Context-Sensitive Section: INVESTMENT / SIP */}
+            {expenseType === "INVESTMENT" && (
+              <div className="pt-3 border-t border-cream-200 space-y-3">
+                <label className="block text-xs font-medium text-gray-700">
+                  Select SIP / Mutual Fund <span className="text-coral-500">*</span>
+                </label>
+                {sips.length === 0 ? (
+                  <div className="p-3 bg-white border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-between">
+                    <span>No active SIPs found in your Net Worth tracker.</span>
+                    <Link href="/net-worth" className="text-forest-600 font-semibold underline ml-2">
+                      Add SIP in Net Worth →
+                    </Link>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedSipId}
+                    onChange={(e) => handleSipSelect(e.target.value)}
+                    className="w-full px-3 py-2 border border-cream-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-forest-500 focus:border-transparent font-medium"
+                  >
+                    <option value="">-- Choose SIP Scheme --</option>
+                    {sips.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.schemeName} — Monthly: ₹{s.monthlyAmount.toLocaleString("en-IN")} {s.currentNAV > 0 ? `| Live NAV: ₹${s.currentNAV}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {(() => {
+                  const selectedSip = sips.find((s) => s.id === selectedSipId);
+                  if (!selectedSip) return null;
+                  const parsedUnits = parseFloat(allottedUnits || "0");
+                  const currentTotalUnits = selectedSip.totalUnitsHeld || 0;
+
+                  return (
+                    <div className="p-3.5 bg-white border border-emerald-200 rounded-lg space-y-3 shadow-sm">
+                      <div className="flex items-center justify-between text-xs text-forest-900 font-medium border-b border-cream-200 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-900">{selectedSip.schemeName}</span>
+                          <span className="text-[11px] text-forest-700 bg-forest-50 px-2 py-0.5 rounded border border-forest-200 font-medium">
+                            Monthly: ₹{selectedSip.monthlyAmount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const amt = selectedSip.monthlyAmount;
+                              setAmount(String(amt));
+                              const nav = parseFloat(allotmentNav || String(selectedSip.currentNAV || 0));
+                              if (amt > 0 && nav > 0) {
+                                setAllottedUnits((amt / nav).toFixed(4));
+                              }
+                              toast.success(`Filled monthly SIP amount: ₹${amt.toLocaleString("en-IN")}`);
+                            }}
+                            className="text-[11px] font-semibold text-forest-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded transition-colors"
+                          >
+                            Fill ₹{selectedSip.monthlyAmount.toLocaleString("en-IN")}
+                          </button>
+                          <span className="text-emerald-700 text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-normal">
+                            Live Portfolio Sync
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                            Investment Amount (₹) <span className="text-coral-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={amount}
+                            onChange={(e) => handleAmountChange(e.target.value)}
+                            placeholder="e.g. 15000"
+                            className="w-full px-3 py-2 bg-cream-50/50 border border-cream-300 rounded-md text-xs focus:ring-2 focus:ring-forest-500 focus:bg-white focus:outline-none font-mono font-semibold text-gray-900"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            SIP: ₹{selectedSip.monthlyAmount.toLocaleString("en-IN")}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                            Allotment NAV (Avg Cost) ₹
+                          </label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={allotmentNav}
+                            onChange={(e) => handleNavChange(e.target.value)}
+                            placeholder="e.g. 17.8191"
+                            className="w-full px-3 py-2 bg-cream-50/50 border border-cream-300 rounded-md text-xs focus:ring-2 focus:ring-forest-500 focus:bg-white focus:outline-none font-mono font-semibold text-gray-900"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Current AMFI NAV or statement NAV
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                            Units Allocated
+                          </label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={allottedUnits}
+                            onChange={(e) => handleUnitsChange(e.target.value)}
+                            placeholder="e.g. 841.7934"
+                            className="w-full px-3 py-2 bg-cream-50/50 border border-cream-300 rounded-md text-xs focus:ring-2 focus:ring-forest-500 focus:bg-white focus:outline-none font-mono font-semibold text-forest-700"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Units = Amount ÷ NAV
+                          </p>
+                        </div>
+                      </div>
+
+                      {parsedUnits > 0 && (
+                        <div className="text-[11px] text-forest-800 bg-emerald-50/80 px-3 py-2 rounded-md border border-emerald-200 flex items-center justify-between">
+                          <span>Units to Credit: <strong>+{parsedUnits.toFixed(4)}</strong></span>
+                          <span>New Holding: <strong>{(currentTotalUnits + parsedUnits).toFixed(4)}</strong> units</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Amount & Date */}
         {(() => {
@@ -391,7 +814,7 @@ export default function CreateTransactionPage() {
                     <input
                       type="number"
                       value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
+                      onChange={(e) => handleAmountChange(e.target.value)}
                       className={`w-full pl-7 pr-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:border-transparent ${
                         isOverBalance
                           ? "border-coral-500 text-coral-600 focus:ring-coral-500"
@@ -494,8 +917,8 @@ export default function CreateTransactionPage() {
                 </div>
               )}
 
-              {/* Category */}
-              {type !== "TRANSFER" && (
+              {/* Category (Only for Income or General Expense) */}
+              {type !== "TRANSFER" && (type === "INCOME" || expenseType === "GENERAL") && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-sm font-medium text-gray-700">
@@ -562,6 +985,8 @@ export default function CreateTransactionPage() {
                   />
                 </div>
               )}
+
+
 
               {/* Recurring */}
               <div className="flex items-center gap-4">

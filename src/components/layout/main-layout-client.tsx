@@ -12,7 +12,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-cream-100 flex flex-col">
-      <Sidebar />
+      <React.Suspense fallback={<div className="hidden md:flex fixed left-0 top-0 bottom-0 bg-navy-900 w-[220px]" />}>
+        <Sidebar />
+      </React.Suspense>
       <div
         className={cn(
           "transition-all duration-300 ease-in-out flex-1 flex flex-col",
@@ -22,7 +24,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <Topbar />
         <main className="p-3.5 sm:p-6 pb-24 md:pb-8 max-w-7xl mx-auto w-full flex-1">{children}</main>
       </div>
-      <MobileNav />
+      <React.Suspense fallback={null}>
+        <MobileNav />
+      </React.Suspense>
     </div>
   );
 }

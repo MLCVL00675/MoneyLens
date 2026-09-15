@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -10,21 +10,47 @@ import {
   BarChart3,
   Target,
   TrendingUp,
+  Landmark,
+  Coins,
+  CreditCard,
 } from "lucide-react";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentCategory = searchParams.get("category");
 
-  const navItems = [
+  const isNetWorthMode =
+    pathname.startsWith("/net-worth") || pathname.startsWith("/investments");
+
+  const financeNavItems = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/accounts", label: "Accounts", icon: Wallet },
-    { href: "/investments", label: "Invest", icon: TrendingUp },
     { href: "/activity", label: "Activity", icon: ArrowLeftRight },
     { href: "/analysis", label: "Analysis", icon: BarChart3 },
     { href: "/goals", label: "Goals", icon: Target },
   ];
 
+  const netWorthNavItems = [
+    { href: "/net-worth", label: "Overview", icon: LayoutDashboard },
+    { href: "/investments", label: "Stocks/MF", icon: TrendingUp },
+    { href: "/net-worth?category=FIXED_DEPOSIT", label: "FD / Bond", icon: Landmark },
+    { href: "/net-worth?category=GOLD", label: "Phys. Gold", icon: Coins },
+    { href: "/net-worth?category=LIABILITY", label: "Debts", icon: CreditCard },
+  ];
+
+  const navItems = isNetWorthMode ? netWorthNavItems : financeNavItems;
+
   const getIsActive = (itemHref: string) => {
+    if (isNetWorthMode) {
+      if (itemHref === "/investments") return pathname.startsWith("/investments");
+      if (itemHref.includes("?category=")) {
+        const cat = itemHref.split("?category=")[1];
+        return pathname.startsWith("/net-worth") && currentCategory === cat;
+      }
+      return pathname === "/net-worth" && !currentCategory;
+    }
+
     if (itemHref === "/dashboard") return pathname === "/dashboard";
     if (itemHref === "/accounts") return pathname.startsWith("/accounts") || pathname.startsWith("/account/");
     return pathname.startsWith(itemHref);
@@ -45,7 +71,7 @@ export function MobileNav() {
               key={item.label}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all duration-200 min-w-[56px]",
+                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all duration-200 min-w-[52px]",
                 isActive
                   ? "text-gold-400 font-semibold"
                   : "text-gray-400 hover:text-white"

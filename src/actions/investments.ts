@@ -160,13 +160,19 @@ export async function getInvestments() {
   const user = await getCachedUser(userId);
   if (!user) throw new Error("User not found");
 
-  const holdings = await db.investment.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    include: {
-      account: { select: { id: true, name: true } },
-    },
-  });
+  const [holdings, sips] = await Promise.all([
+    db.investment.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        account: { select: { id: true, name: true } },
+      },
+    }),
+    db.sIP.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   let totalInvested = 0;
   let totalCurrentValue = 0;
@@ -225,6 +231,25 @@ export async function getInvestments() {
     };
   });
 
+  const serializedSips = sips.map((s) => ({
+    id: s.id,
+    schemeName: s.schemeName,
+    schemeCode: s.schemeCode,
+    monthlyAmount: Number(s.monthlyAmount),
+    startDate: s.startDate.toISOString(),
+    currentNAV: s.currentNAV ? Number(s.currentNAV) : null,
+    totalUnitsHeld: s.totalUnitsHeld ? Number(s.totalUnitsHeld) : null,
+    totalInvested: Number(s.totalInvested),
+    currentValue: s.currentValue ? Number(s.currentValue) : null,
+    stepUpRate: s.stepUpRate ? Number(s.stepUpRate) : null,
+    expectedReturn: s.expectedReturn ? Number(s.expectedReturn) : null,
+    isActive: s.isActive,
+    notes: s.notes,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+    userId: s.userId,
+  }));
+
   const totalReturn = totalCurrentValue - totalInvested;
   const totalReturnPercent = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
 
@@ -241,6 +266,10 @@ export async function getInvestments() {
       percentage: totalCurrentValue > 0 ? (value / totalCurrentValue) * 100 : 0,
     }));
 
+  const totalMonthlySip = sips
+    .filter((s) => s.isActive)
+    .reduce((sum, s) => sum + Number(s.monthlyAmount), 0);
+
   return {
     summary: {
       totalInvested,
@@ -250,9 +279,12 @@ export async function getInvestments() {
       totalDayChange,
       totalDayChangePercent,
       holdingCount: holdings.length,
+      sipCount: sips.length,
+      totalMonthlySip,
     },
     assetAllocation,
     holdings: serializedHoldings,
+    sips: serializedSips,
   };
 }
 
@@ -434,3 +466,140 @@ export async function fetchAssetLiveQuote(symbol: string, assetType: string, nam
   if (!userId) return null;
   return getAssetLiveQuote(symbol, assetType, name);
 }
+
+// ─── Get Detailed Holding History & Linked SIP Transactions ─────────────────
+export async function getInvestmentDetails(investmentId: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const user = await getCachedUser(userId);
+  if (!user) throw new Error("User not found");
+
+  const investment = await db.investment.findUnique({
+    where: { id: investmentId, userId: user.id },
+    include: {
+      account: { select: { id: true, name: true } },
+    },
+  });
+
+  if (!investment) throw new Error("Investment holding not found");
+
+  // Find any SIP associated with this investment
+  const sips = await db.sIP.findMany({
+    where: { userId: user.id },
+  });
+
+  const normInvName = investment.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const matchingSips = sips.filter((s) => {
+    const normSipName = s.schemeName.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (
+      s.schemeCode &&
+      investment.symbol &&
+      s.schemeCode.toLowerCase() === investment.symbol.toLowerCase()
+    ) {
+      return true;
+    }
+    return (
+      normInvName.includes(normSipName) ||
+      normSipName.includes(normInvName)
+    );
+  });
+
+  const matchingSipIds = matchingSips.map((s) => s.id);
+
+  // Fetch all transactions linked to these SIPs or with description matching investment name
+  const transactions = await db.transaction.findMany({
+    where: {
+      userId: user.id,
+      OR: [
+        ...(matchingSipIds.length > 0
+          ? [{ sipId: { in: matchingSipIds } }]
+          : []),
+        {
+          description: {
+            contains: investment.name.split(" ")[0],
+            mode: "insensitive",
+          },
+        },
+      ],
+    },
+    orderBy: { date: "desc" },
+    include: {
+      account: { select: { id: true, name: true } },
+    },
+  });
+
+  const unitsHeld = Number(investment.units);
+  const avgBuyPrice = Number(investment.buyPrice);
+  const currentPrice = Number(investment.currentPrice);
+  const previousClose = Number(investment.previousClose ?? currentPrice);
+  const totalInvested = unitsHeld * avgBuyPrice;
+  const currentValue = unitsHeld * currentPrice;
+  const totalReturn = currentValue - totalInvested;
+  const returnPercent =
+    totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
+
+  // Format transactions with allotment NAV and allotted units
+  const formattedTransactions = transactions.map((t) => {
+    const amt = Number(t.amount);
+    const nav = t.allotmentNav ? Number(t.allotmentNav) : 0;
+    const units = t.allottedUnits
+      ? Number(t.allottedUnits)
+      : nav > 0
+      ? amt / nav
+      : 0;
+
+    return {
+      id: t.id,
+      date: t.date.toISOString(),
+      description: t.description,
+      amount: amt,
+      nav: nav > 0 ? nav : null,
+      units: units > 0 ? units : null,
+      type: t.type,
+      category: t.category,
+      accountName: t.account?.name || "Bank Account",
+      expenseType: t.expenseType,
+    };
+  });
+
+  // Calculate sum of units recorded in transactions
+  const txUnitsSum = formattedTransactions.reduce(
+    (sum, t) => sum + (t.units || 0),
+    0
+  );
+  const openingUnits = Math.max(0, unitsHeld - txUnitsSum);
+
+  return {
+    investment: {
+      id: investment.id,
+      name: investment.name,
+      symbol: investment.symbol,
+      assetType: investment.assetType,
+      units: unitsHeld,
+      buyPrice: avgBuyPrice,
+      currentPrice,
+      previousClose,
+      totalInvested,
+      currentValue,
+      totalReturn,
+      returnPercent,
+      category: investment.category,
+      folioOrAccount: investment.folioOrAccount,
+      createdAt: investment.createdAt.toISOString(),
+      accountName: investment.account?.name || null,
+    },
+    openingBalance:
+      openingUnits > 0
+        ? {
+            description: "Opening Holding / Statement Import",
+            units: openingUnits,
+            nav: avgBuyPrice,
+            amount: openingUnits * avgBuyPrice,
+            date: investment.createdAt.toISOString(),
+          }
+        : null,
+    transactions: formattedTransactions,
+  };
+}
+

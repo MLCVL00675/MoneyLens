@@ -20,6 +20,12 @@ export async function createTransaction(data: {
   recurringInterval?: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   // Transfer fields
   transferAccountId?: string;
+  // Net Worth Mappings
+  expenseType?: "GENERAL" | "INVESTMENT" | "LOAN";
+  sipId?: string;
+  liabilityId?: string;
+  allottedUnits?: number;
+  allotmentNav?: number;
 }) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -133,6 +139,11 @@ export async function createTransaction(data: {
           recurringInterval: data.recurringInterval || null,
           nextRecurringDate,
           status: "COMPLETED",
+          expenseType: data.expenseType || "GENERAL",
+          sipId: data.sipId || null,
+          liabilityId: data.liabilityId || null,
+          allottedUnits: data.allottedUnits !== undefined ? data.allottedUnits : null,
+          allotmentNav: data.allotmentNav !== undefined ? data.allotmentNav : null,
         },
       });
 
@@ -146,11 +157,163 @@ export async function createTransaction(data: {
         },
       });
 
+      // ─── Loan / Liability Synchronization ────────────────────────────────
+      if (data.liabilityId && data.type === "EXPENSE") {
+        const liability = await tx.liability.findUnique({
+          where: { id: data.liabilityId, userId: user.id },
+        });
+
+        if (liability) {
+          const currentPrincipal = Number(liability.principalRemaining);
+          const annualRate = Number(liability.interestRate);
+          // Monthly interest = principal * (annualRate / 100) / 12
+          const monthlyInterest = (currentPrincipal * (annualRate / 100)) / 12;
+          // Principal portion of EMI
+          const principalPaid = Math.max(
+            0,
+            Math.min(currentPrincipal, data.amount - monthlyInterest)
+          );
+          const newPrincipal = Math.max(0, currentPrincipal - principalPaid);
+          const newTenure =
+            liability.remainingTenureMonths && liability.remainingTenureMonths > 1
+              ? liability.remainingTenureMonths - 1
+              : 0;
+
+          await tx.liability.update({
+            where: { id: liability.id },
+            data: {
+              principalRemaining: newPrincipal,
+              remainingTenureMonths: newTenure,
+            },
+          });
+        }
+      }
+
+      // ─── Investment / SIP Synchronization ────────────────────────────────
+      if (data.sipId && data.type === "EXPENSE") {
+        const sip = await tx.sIP.findUnique({
+          where: { id: data.sipId, userId: user.id },
+        });
+
+        if (sip) {
+          const navValue =
+            data.allotmentNav && data.allotmentNav > 0
+              ? data.allotmentNav
+              : sip.currentNAV && Number(sip.currentNAV) > 0
+              ? Number(sip.currentNAV)
+              : 0;
+
+          const unitsToAdd =
+            data.allottedUnits !== undefined && data.allottedUnits > 0
+              ? data.allottedUnits
+              : navValue > 0
+              ? data.amount / navValue
+              : 0;
+
+          const oldInvested = Number(sip.totalInvested);
+          const newInvested = oldInvested + data.amount;
+          const oldUnits = sip.totalUnitsHeld ? Number(sip.totalUnitsHeld) : 0;
+          const newUnits = oldUnits + unitsToAdd;
+          const newCurrentValue =
+            navValue > 0 ? newUnits * navValue : undefined;
+
+          // 1. Update SIP in Net Worth Tracker
+          await tx.sIP.update({
+            where: { id: sip.id },
+            data: {
+              totalInvested: newInvested,
+              totalUnitsHeld: newUnits,
+              currentNAV: navValue > 0 ? navValue : undefined,
+              currentValue: newCurrentValue,
+            },
+          });
+
+          // 2. Sync / Upsert into db.investment (Reflects in Investments Tab under Mutual Funds)
+          const userMfHoldings = await tx.investment.findMany({
+            where: { userId: user.id, assetType: "MUTUAL_FUND" },
+          });
+
+          const normSipName = sip.schemeName.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const sipCode = sip.schemeCode ? sip.schemeCode.trim().toLowerCase() : "";
+
+          const existingInv =
+            userMfHoldings.find((inv) => {
+              const normInvName = inv.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+              const invSymbol = inv.symbol.toLowerCase();
+
+              // 1. Symbol or AMFI code match
+              if (sipCode && (invSymbol === sipCode || invSymbol.includes(sipCode))) {
+                return true;
+              }
+              // 2. Exact normalized name match
+              if (normSipName === normInvName) {
+                return true;
+              }
+              // 3. Substring containment match (e.g. "Motilal Oswal Small Cap Fund" vs "MOTILAL OSWAL SMALL CAP FUND - REGULAR")
+              if (normSipName.length > 8 && normInvName.length > 8) {
+                if (normSipName.includes(normInvName) || normInvName.includes(normSipName)) {
+                  return true;
+                }
+              }
+              return false;
+            }) || null;
+
+
+          if (existingInv) {
+            const existingUnits = Number(existingInv.units);
+            const existingBuyPrice = Number(existingInv.buyPrice);
+            const updatedUnits = existingUnits + unitsToAdd;
+            const updatedBuyPrice =
+              updatedUnits > 0
+                ? (existingUnits * existingBuyPrice + data.amount) / updatedUnits
+                : existingBuyPrice;
+
+            await tx.investment.update({
+              where: { id: existingInv.id },
+              data: {
+                units: updatedUnits,
+                buyPrice: updatedBuyPrice,
+                currentPrice:
+                  navValue > 0 ? navValue : existingInv.currentPrice,
+                lastPriceUpdate: new Date(),
+              },
+            });
+          } else {
+            // Create new holding in Investments tab
+            await tx.investment.create({
+              data: {
+                userId: user.id,
+                name: sip.schemeName,
+                symbol:
+                  sip.schemeCode ||
+                  sip.schemeName.substring(0, 10).toUpperCase(),
+                assetType: "MUTUAL_FUND",
+                units: unitsToAdd,
+                buyPrice: unitsToAdd > 0 ? data.amount / unitsToAdd : navValue,
+                currentPrice: navValue > 0 ? navValue : 0,
+                exchange: "AMFI",
+                category: "Mutual Fund SIP",
+                accountId: data.accountId,
+                notes: `Auto-linked from SIP: ${sip.schemeName}`,
+                lastPriceUpdate: new Date(),
+              },
+            });
+          }
+        }
+      }
+
       return transaction;
     }
+  }, {
+    maxWait: 10000,
+    timeout: 30000,
   });
 
+
   revalidatePath("/dashboard");
+  revalidatePath("/activity");
+  revalidatePath("/investments");
+  revalidatePath("/net-worth");
   revalidatePath(`/account/${data.accountId}`);
   if (data.transferAccountId) {
     revalidatePath(`/account/${data.transferAccountId}`);
@@ -158,6 +321,7 @@ export async function createTransaction(data: {
 
   return serializeTransaction(result);
 }
+
 
 export async function updateTransaction(
   transactionId: string,
@@ -234,6 +398,151 @@ export async function updateTransaction(
   return serializeTransaction(result);
 }
 
+// ─── Reversal Helper for Net Worth & Portfolio Synchronization ─────────────
+async function reverseTransactionNetWorthEffects(
+  tx: any,
+  transaction: any,
+  userId: string
+) {
+  // 1. Revert SIP & Mutual Fund Holding Effects
+  let sip = null;
+  if (transaction.sipId) {
+    sip = await tx.sIP.findUnique({
+      where: { id: transaction.sipId, userId },
+    });
+  } else if (
+    transaction.category === "Investment" ||
+    transaction.category?.toLowerCase().includes("invest") ||
+    transaction.description?.toLowerCase().includes("sip")
+  ) {
+    // Fallback: match SIP scheme by description if sipId was not explicitly set
+    const userSips = await tx.sIP.findMany({ where: { userId } });
+    const descLower = transaction.description.toLowerCase();
+    sip =
+      userSips.find(
+        (s: any) =>
+          descLower.includes(s.schemeName.toLowerCase()) ||
+          s.schemeName.toLowerCase().includes(descLower.replace(" sip", ""))
+      ) || null;
+  }
+
+  if (sip) {
+    const amt = Number(transaction.amount);
+    const navVal =
+      transaction.allotmentNav && Number(transaction.allotmentNav) > 0
+        ? Number(transaction.allotmentNav)
+        : sip.currentNAV && Number(sip.currentNAV) > 0
+        ? Number(sip.currentNAV)
+        : 0;
+
+    const unitsToDeduct =
+      transaction.allottedUnits !== null &&
+      transaction.allottedUnits !== undefined &&
+      Number(transaction.allottedUnits) > 0
+        ? Number(transaction.allottedUnits)
+        : navVal > 0
+        ? amt / navVal
+        : 0;
+
+    const oldInvested = Number(sip.totalInvested);
+    const newInvested = Math.max(0, oldInvested - amt);
+    const oldUnits = sip.totalUnitsHeld ? Number(sip.totalUnitsHeld) : 0;
+    const newUnits = Math.max(0, oldUnits - unitsToDeduct);
+    const newCurrentValue =
+      navVal > 0
+        ? newUnits * navVal
+        : sip.currentValue
+        ? Math.max(0, Number(sip.currentValue) - amt)
+        : newInvested;
+
+    // Revert SIP in Net Worth Tracker
+    await tx.sIP.update({
+      where: { id: sip.id },
+      data: {
+        totalInvested: newInvested,
+        totalUnitsHeld: newUnits,
+        currentValue: newCurrentValue,
+      },
+    });
+
+    // Revert holding in db.investment (reflected in Investments and Net Worth tabs)
+    const userMfHoldings = await tx.investment.findMany({
+      where: { userId, assetType: "MUTUAL_FUND" },
+    });
+
+    const normSipName = sip.schemeName.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const sipCode = sip.schemeCode ? sip.schemeCode.trim().toLowerCase() : "";
+
+    const existingInv =
+      userMfHoldings.find((inv: any) => {
+        const normInvName = inv.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const invSymbol = inv.symbol.toLowerCase();
+
+        if (sipCode && (invSymbol === sipCode || invSymbol.includes(sipCode)))
+          return true;
+        if (normSipName === normInvName) return true;
+        if (normSipName.length > 8 && normInvName.length > 8) {
+          if (
+            normSipName.includes(normInvName) ||
+            normInvName.includes(normSipName)
+          )
+            return true;
+        }
+        return false;
+      }) || null;
+
+    if (existingInv) {
+      const existingUnits = Number(existingInv.units);
+      const existingBuyPrice = Number(existingInv.buyPrice);
+      const remainingUnits = Math.max(0, existingUnits - unitsToDeduct);
+      const existingTotalCost = existingUnits * existingBuyPrice;
+      const remainingTotalCost = Math.max(0, existingTotalCost - amt);
+
+      if (remainingUnits <= 0.0001) {
+        await tx.investment.delete({
+          where: { id: existingInv.id },
+        });
+      } else {
+        const newBuyPrice =
+          remainingUnits > 0 ? remainingTotalCost / remainingUnits : existingBuyPrice;
+
+        await tx.investment.update({
+          where: { id: existingInv.id },
+          data: {
+            units: remainingUnits,
+            buyPrice: Math.round(newBuyPrice * 100) / 100,
+            lastPriceUpdate: new Date(),
+          },
+        });
+      }
+    }
+  }
+
+  // 2. Revert Loan / Liability EMI Principal Reduction
+  let liability = null;
+  if (transaction.liabilityId) {
+    liability = await tx.liability.findUnique({
+      where: { id: transaction.liabilityId, userId },
+    });
+  }
+
+  if (liability) {
+    const amt = Number(transaction.amount);
+    const rate = Number(liability.interestRate);
+    const currentPrincipal = Number(liability.principalRemaining);
+    const monthlyInterest = (currentPrincipal * (rate / 100)) / 12;
+    const estPrincipalPaid = Math.max(0, Math.min(amt, amt - monthlyInterest));
+    const restoredPrincipal = currentPrincipal + estPrincipalPaid;
+
+    await tx.liability.update({
+      where: { id: liability.id },
+      data: {
+        principalRemaining: restoredPrincipal,
+      },
+    });
+  }
+}
+
 export async function deleteTransaction(transactionId: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -246,24 +555,39 @@ export async function deleteTransaction(transactionId: string) {
   });
   if (!transaction) throw new Error("Transaction not found");
 
-  await db.$transaction(async (tx) => {
-    // Reverse balance effect
-    const balanceChange =
-      transaction.type === "INCOME"
-        ? -transaction.amount.toNumber()
-        : transaction.amount.toNumber();
+  await db.$transaction(
+    async (tx) => {
+      // 1. Reverse balance effect on Account
+      const balanceChange =
+        transaction.type === "INCOME"
+          ? -transaction.amount.toNumber()
+          : transaction.amount.toNumber();
 
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { increment: balanceChange } },
-    });
+      await tx.account.update({
+        where: { id: transaction.accountId },
+        data: { balance: { increment: balanceChange } },
+      });
 
-    await tx.transaction.delete({
-      where: { id: transactionId },
-    });
-  });
+      // 2. Reverse Net Worth & Portfolio effects (SIP / Investment / Loan)
+      await reverseTransactionNetWorthEffects(tx, transaction, user.id);
+
+      // 3. Delete transaction record
+      await tx.transaction.delete({
+        where: { id: transactionId },
+      });
+    },
+    {
+      timeout: 30000,
+      maxWait: 10000,
+    }
+  );
 
   revalidatePath("/dashboard");
+  revalidatePath("/activity");
+  revalidatePath("/investments");
+  revalidatePath("/net-worth");
+  revalidatePath("/analysis");
+  revalidatePath("/accounts");
   revalidatePath(`/account/${transaction.accountId}`);
   return { success: true };
 }
@@ -279,32 +603,46 @@ export async function bulkDeleteTransactions(transactionIds: string[]) {
     where: { id: { in: transactionIds }, userId: user.id },
   });
 
-  await db.$transaction(async (tx) => {
-    // Group balance adjustments by account
-    const accountAdjustments: Record<string, number> = {};
+  await db.$transaction(
+    async (tx) => {
+      // Group balance adjustments by account
+      const accountAdjustments: Record<string, number> = {};
 
-    for (const t of transactions) {
-      const adjustment =
-        t.type === "INCOME" ? -t.amount.toNumber() : t.amount.toNumber();
-      accountAdjustments[t.accountId] =
-        (accountAdjustments[t.accountId] || 0) + adjustment;
-    }
+      for (const t of transactions) {
+        const adjustment =
+          t.type === "INCOME" ? -t.amount.toNumber() : t.amount.toNumber();
+        accountAdjustments[t.accountId] =
+          (accountAdjustments[t.accountId] || 0) + adjustment;
 
-    // Apply all balance adjustments
-    for (const [accountId, adjustment] of Object.entries(accountAdjustments)) {
-      await tx.account.update({
-        where: { id: accountId },
-        data: { balance: { increment: adjustment } },
+        // Reverse Net Worth & Portfolio effects for each transaction
+        await reverseTransactionNetWorthEffects(tx, t, user.id);
+      }
+
+      // Apply all balance adjustments
+      for (const [accountId, adjustment] of Object.entries(accountAdjustments)) {
+        await tx.account.update({
+          where: { id: accountId },
+          data: { balance: { increment: adjustment } },
+        });
+      }
+
+      // Delete all transactions
+      await tx.transaction.deleteMany({
+        where: { id: { in: transactionIds }, userId: user.id },
       });
+    },
+    {
+      timeout: 30000,
+      maxWait: 10000,
     }
-
-    // Delete all transactions
-    await tx.transaction.deleteMany({
-      where: { id: { in: transactionIds }, userId: user.id },
-    });
-  });
+  );
 
   revalidatePath("/dashboard");
+  revalidatePath("/activity");
+  revalidatePath("/investments");
+  revalidatePath("/net-worth");
+  revalidatePath("/analysis");
+  revalidatePath("/accounts");
   return { success: true, count: transactions.length };
 }
 
