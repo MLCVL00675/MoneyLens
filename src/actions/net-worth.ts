@@ -19,6 +19,7 @@ import {
 import {
   computeNetWorthSummary,
   calculatePropertyCompoundedValue,
+  calculateLoanRemainingTenure,
 } from "@/lib/net-worth/calculators";
 import {
   searchMutualFunds,
@@ -705,6 +706,15 @@ export async function saveLiability(data: {
   notes?: string | null;
 }) {
   const user = await getAuthenticatedUser();
+  const computedTenure =
+    data.remainingTenureMonths != null
+      ? data.remainingTenureMonths
+      : calculateLoanRemainingTenure(
+          data.principalRemaining,
+          data.monthlyEMI,
+          data.interestRate
+        );
+
   const payload = {
     liabilityType: (data.liabilityType || "PERSONAL_LOAN") as any,
     lenderName: data.lenderName,
@@ -712,7 +722,7 @@ export async function saveLiability(data: {
     originalPrincipal: data.originalPrincipal ?? null,
     interestRate: data.interestRate,
     monthlyEMI: data.monthlyEMI,
-    remainingTenureMonths: data.remainingTenureMonths ?? null,
+    remainingTenureMonths: computedTenure,
     startDate: data.startDate ? new Date(data.startDate) : null,
     endDate: data.endDate ? new Date(data.endDate) : null,
     notes: data.notes ?? null,
@@ -780,7 +790,15 @@ export async function reopenLiability(
   const origPrincipal = Number(existing.originalPrincipal || 0);
   const principal = restoredPrincipal ?? (origPrincipal > 0 ? origPrincipal : 100000);
   const emi = restoredEMI ?? 5000;
-  const tenure = restoredTenure ?? 12;
+  const tenure =
+    restoredTenure ??
+    (existing.remainingTenureMonths && existing.remainingTenureMonths > 0
+      ? existing.remainingTenureMonths
+      : calculateLoanRemainingTenure(
+          principal,
+          emi,
+          Number(existing.interestRate || 8.5)
+        ) || 12);
 
   await db.liability.updateMany({
     where: { id, userId: user.id },

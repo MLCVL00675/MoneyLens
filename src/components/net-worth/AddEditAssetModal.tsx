@@ -25,6 +25,7 @@ import {
 import {
   calculateFDMaturityValue,
   calculatePropertyCompoundedValue,
+  calculateLoanRemainingTenure,
 } from "@/lib/net-worth/calculators";
 import {
   PreciousMetalRates,
@@ -155,6 +156,25 @@ export function AddEditAssetModal({
   const [remainingTenure, setRemainingTenure] = useState("");
 
   const [notes, setNotes] = useState("");
+
+  const suggestedTenure = (() => {
+    if (category !== "LIABILITY") return null;
+    const p = parseFloat(principalRemaining);
+    const emi = parseFloat(monthlyEMI);
+    const rate = parseFloat(loanRate) || 0;
+    if (p > 0 && emi > 0) {
+      return calculateLoanRemainingTenure(p, emi, rate);
+    }
+    return null;
+  })();
+
+  const formatTenureSummary = (months: number) => {
+    const yrs = Math.floor(months / 12);
+    const rem = months % 12;
+    if (yrs === 0) return `${months} mos`;
+    if (rem === 0) return `${yrs} yr${yrs > 1 ? "s" : ""}`;
+    return `${yrs} yr${yrs > 1 ? "s" : ""}, ${rem} mo${rem > 1 ? "s" : ""}`;
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -315,6 +335,7 @@ export function AddEditAssetModal({
       setLoanRate(String(initialData.interestRate || "8.75"));
       setMonthlyEMI(String(initialData.monthlyEMI || ""));
       setRemainingTenure(String(initialData.remainingTenureMonths || ""));
+      setStartDate(initialData.startDate ? initialData.startDate.slice(0, 10) : "");
     }
     setNotes(initialData.notes || "");
   }, [initialData, initialCategory]);
@@ -449,6 +470,10 @@ export function AddEditAssetModal({
           notes,
         });
       } else if (category === "LIABILITY") {
+        const finalTenure = remainingTenure
+          ? parseInt(remainingTenure)
+          : suggestedTenure ?? null;
+
         await saveLiability({
           id: initialData?.id,
           liabilityType,
@@ -457,7 +482,8 @@ export function AddEditAssetModal({
           originalPrincipal: originalPrincipal ? parseFloat(originalPrincipal) : null,
           interestRate: parseFloat(loanRate) || 0,
           monthlyEMI: parseFloat(monthlyEMI) || 0,
-          remainingTenureMonths: remainingTenure ? parseInt(remainingTenure) : null,
+          remainingTenureMonths: finalTenure,
+          startDate: startDate || null,
           notes,
         });
       }
@@ -1329,6 +1355,47 @@ export function AddEditAssetModal({
                       placeholder="e.g. 8.75"
                       value={loanRate}
                       onChange={(e) => setLoanRate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-border/60 bg-muted/20 text-foreground"
+                    />
+                  </FormField>
+                </FormRow>
+
+                <FormRow>
+                  <FormField label="Remaining Tenure (Months)">
+                    <div>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder={
+                          suggestedTenure
+                            ? `Auto-estimated: ${suggestedTenure} mos`
+                            : "e.g. 60"
+                        }
+                        value={remainingTenure}
+                        onChange={(e) => setRemainingTenure(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-border/60 bg-muted/20 text-foreground"
+                      />
+                      {suggestedTenure && suggestedTenure !== parseInt(remainingTenure) && (
+                        <button
+                          type="button"
+                          onClick={() => setRemainingTenure(String(suggestedTenure))}
+                          className="mt-1 text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+                        >
+                          Auto-fill: {suggestedTenure} mos ({formatTenureSummary(suggestedTenure)})
+                        </button>
+                      )}
+                      {remainingTenure && parseInt(remainingTenure) > 0 && (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          Equivalent to ~{formatTenureSummary(parseInt(remainingTenure))}
+                        </p>
+                      )}
+                    </div>
+                  </FormField>
+                  <FormField label="Loan Start Date (Optional)">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-border/60 bg-muted/20 text-foreground"
                     />
                   </FormField>

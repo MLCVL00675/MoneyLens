@@ -16,6 +16,33 @@ import {
   CompoundingFrequency,
 } from "./types";
 
+// ─── Loan / Liability Calculators ───────────────────────────────────────────
+/**
+ * Calculate remaining loan tenure in months given principal remaining, monthly EMI, and annual interest rate.
+ * Uses the standard amortization formula: n = -ln(1 - (P * r) / EMI) / ln(1 + r)
+ */
+export function calculateLoanRemainingTenure(
+  principal: number,
+  monthlyEMI: number,
+  annualInterestRate: number
+): number | null {
+  if (principal <= 0 || monthlyEMI <= 0) return 0;
+  if (annualInterestRate <= 0) {
+    return Math.ceil(principal / monthlyEMI);
+  }
+
+  const r = annualInterestRate / 100 / 12;
+  const monthlyInterest = principal * r;
+
+  // If EMI cannot cover the monthly interest, the loan cannot amortize
+  if (monthlyEMI <= monthlyInterest) {
+    return null;
+  }
+
+  const months = -Math.log(1 - (principal * r) / monthlyEMI) / Math.log(1 + r);
+  return Math.max(1, Math.ceil(months));
+}
+
 // ─── Physical Real Estate Calculators ────────────────────────────────────────
 export function calculatePropertyCompoundedValue(
   invested: number,
