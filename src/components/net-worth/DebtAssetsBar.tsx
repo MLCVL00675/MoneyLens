@@ -49,17 +49,17 @@ export function DebtAssetsBar({ summary }: DebtAssetsBarProps) {
 
   // Chart data: Compare All Asset Classes against Liabilities
   const barData = [
-    { category: "Stocks", Assets: summary.directStocksValue || 0, Debt: 0 },
-    { category: "Mutual Funds", Assets: summary.mutualFundsValue || 0, Debt: 0 },
-    { category: "Gold/Silv MF", Assets: summary.goldSilverFundsValue || 0, Debt: 0 },
-    { category: "Phys. Gold", Assets: summary.physicalGoldValue || 0, Debt: 0 },
-    { category: "FD / RD", Assets: summary.fdValue || 0, Debt: 0 },
-    { category: "Bonds", Assets: summary.bondValue || 0, Debt: 0 },
-    { category: "SIPs", Assets: summary.sipValue || 0, Debt: 0 },
-    { category: "REITs", Assets: summary.realEstateValue || 0, Debt: 0 },
-    { category: "Retirement", Assets: summary.retirementValue || 0, Debt: 0 },
-    { category: "Liabilities", Assets: 0, Debt: totalDebt },
-  ].filter((item) => item.Assets > 0 || item.category === "Liabilities");
+    { category: "Stocks", shortCategory: "Stocks", Assets: summary.directStocksValue || 0, Debt: 0 },
+    { category: "Mutual Funds", shortCategory: "Mutual Funds", Assets: summary.mutualFundsValue || 0, Debt: 0 },
+    { category: "Gold/Silver MF", shortCategory: "Gold MF", Assets: summary.goldSilverFundsValue || 0, Debt: 0 },
+    { category: "Physical Gold", shortCategory: "Phys Gold", Assets: summary.physicalGoldValue || 0, Debt: 0 },
+    { category: "Fixed Deposit / RD", shortCategory: "FD / RD", Assets: summary.fdValue || 0, Debt: 0 },
+    { category: "Bonds & G-Secs", shortCategory: "Bonds", Assets: summary.bondValue || 0, Debt: 0 },
+    { category: "SIPs", shortCategory: "SIPs", Assets: summary.sipValue || 0, Debt: 0 },
+    { category: "Real Estate / REITs", shortCategory: "REITs", Assets: summary.realEstateValue || 0, Debt: 0 },
+    { category: "Retirement (EPF/PPF/NPS)", shortCategory: "Retirement", Assets: summary.retirementValue || 0, Debt: 0 },
+    { category: "Total Liabilities", shortCategory: "Liabilities", Assets: 0, Debt: totalDebt },
+  ].filter((item) => item.Assets > 0 || item.category === "Total Liabilities");
 
   const RiskIcon = riskBadge.icon;
 
@@ -122,11 +122,11 @@ export function DebtAssetsBar({ summary }: DebtAssetsBarProps) {
       </div>
 
       {/* Bar Chart */}
-      <div className="h-[220px] sm:h-[250px] w-full pt-1">
+      <div className="h-[260px] sm:h-[280px] w-full pt-1">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={barData}
-            margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+            margin={{ top: 10, right: 10, left: 4, bottom: 25 }}
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -135,28 +135,38 @@ export function DebtAssetsBar({ summary }: DebtAssetsBarProps) {
               className="text-border/40"
             />
             <XAxis
-              dataKey="category"
+              dataKey="shortCategory"
               tickLine={false}
               axisLine={false}
               interval={0}
+              height={45}
+              angle={-35}
+              textAnchor="end"
               tick={{ fontSize: 9, fill: "currentColor" }}
               className="text-muted-foreground"
             />
             <YAxis
-              width={38}
+              width={42}
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 10, fill: "currentColor" }}
               className="text-muted-foreground"
-              tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`}
+              tickFormatter={(v) => {
+                if (v === 0) return "₹0";
+                if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+                if (v >= 100000) return `₹${(v / 100000).toFixed(0)}L`;
+                if (v >= 1000) return `₹${(v / 1000).toFixed(0)}k`;
+                return `₹${v}`;
+              }}
             />
             <Tooltip
               content={({ active, payload, label }) => {
                 if (active && payload && payload.length) {
+                  const fullLabel = payload[0]?.payload?.category || label;
                   return (
                     <div className="rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-md text-xs space-y-1">
                       <div className="font-semibold text-foreground border-b border-border/40 pb-1">
-                        {label}
+                        {fullLabel}
                       </div>
                       {payload.map((p: any) =>
                         p.value > 0 ? (
@@ -184,12 +194,14 @@ export function DebtAssetsBar({ summary }: DebtAssetsBarProps) {
               name="Asset Value"
               fill="#10B981"
               radius={[4, 4, 0, 0]}
+              maxBarSize={32}
             />
             <Bar
               dataKey="Debt"
               name="Debt Remaining"
               fill="#F43F5E"
               radius={[4, 4, 0, 0]}
+              maxBarSize={32}
             />
           </BarChart>
         </ResponsiveContainer>

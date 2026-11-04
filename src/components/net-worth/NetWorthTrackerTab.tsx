@@ -193,7 +193,13 @@ export function NetWorthTrackerTab() {
             />
             <KPICard label="Average Interest Rate" value={`${avgRate.toFixed(2)}% p.a.`} subtitle="Compounded quarterly" />
           </div>
-          <MaturityTimeline fixedDeposits={data.fixedDeposits} bonds={[]} liabilities={[]} />
+          <MaturityTimeline
+            title="FD & RD Maturity Schedule"
+            description="Upcoming fixed & recurring deposit payout milestones"
+            fixedDeposits={data.fixedDeposits}
+            bonds={[]}
+            liabilities={[]}
+          />
           <AssetTable summary={data} category="FIXED_DEPOSIT" onAddNew={() => handleAddNew("FIXED_DEPOSIT")} onEdit={handleEdit} onDelete={handleDelete} />
         </div>
       );
@@ -221,7 +227,13 @@ export function NetWorthTrackerTab() {
             <KPICard label="Annual Coupon Income" value={formatCurrency(annualCoupon)} valueClassName="text-emerald-600 dark:text-emerald-400" subtitle="Scheduled cashflow per year" />
             <KPICard label="Weighted Coupon Yield" value={`${avgCoupon.toFixed(2)}%`} subtitle="Effective coupon payout rate" />
           </div>
-          <MaturityTimeline fixedDeposits={[]} bonds={data.bonds} liabilities={[]} />
+          <MaturityTimeline
+            title="Bond Redemption Timeline"
+            description="Scheduled bond maturities and redemption values"
+            fixedDeposits={[]}
+            bonds={data.bonds}
+            liabilities={[]}
+          />
           <AssetTable summary={data} category="BOND" onAddNew={() => handleAddNew("BOND")} onEdit={handleEdit} onDelete={handleDelete} />
         </div>
       );
@@ -530,7 +542,14 @@ export function NetWorthTrackerTab() {
               <DebtAssetsBar summary={data} />
             </div>
             <div>
-              <MaturityTimeline fixedDeposits={[]} bonds={[]} liabilities={data.liabilities} />
+              <MaturityTimeline
+                title="Debt Payoff Timeline"
+                description="Projected payoff milestones for active loans"
+                fixedDeposits={[]}
+                bonds={[]}
+                liabilities={data.liabilities}
+                compact
+              />
             </div>
           </div>
 

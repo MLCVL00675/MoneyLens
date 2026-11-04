@@ -8,12 +8,22 @@ interface MaturityTimelineProps {
   fixedDeposits: FixedDeposit[];
   bonds: Bond[];
   liabilities: Liability[];
+  compact?: boolean;
+  title?: string;
+  description?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
 export function MaturityTimeline({
   fixedDeposits,
   bonds,
   liabilities,
+  compact = false,
+  title = "Maturity & Liquidity Timeline",
+  description = "Scheduled FD payouts and debt payoff milestones",
+  emptyTitle,
+  emptyDescription,
 }: MaturityTimelineProps) {
   // Collect all upcoming maturity events
   const now = new Date();
@@ -67,16 +77,18 @@ export function MaturityTimeline({
       l.remainingTenureMonths &&
       l.remainingTenureMonths > 0
     ) {
-      const endDate = new Date(
-        now.getFullYear(),
-        now.getMonth() + l.remainingTenureMonths,
-        1
-      );
+      const endDate = l.endDate
+        ? new Date(l.endDate)
+        : new Date(
+            now.getFullYear(),
+            now.getMonth() + l.remainingTenureMonths,
+            1
+          );
       const diffTime = endDate.getTime() - now.getTime();
       const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       events.push({
         id: l.id,
-        title: `${l.lenderName} (${l.liabilityType.replace("_", " ")})`,
+        title: `${l.lenderName || "Loan"} (${(l.liabilityType || "LOAN").replace(/_/g, " ")})`,
         sub: `EMI: ${formatCurrency(l.monthlyEMI)} • ${l.interestRate}% interest`,
         date: endDate,
         type: "LOAN_PAYOFF",
@@ -95,13 +107,20 @@ export function MaturityTimeline({
         <div className="p-3 rounded-full bg-muted w-fit mx-auto mb-2 text-muted-foreground">
           <Calendar className="h-6 w-6" />
         </div>
-        <h4 className="font-semibold text-sm text-foreground">No Upcoming Maturities</h4>
+        <h4 className="font-semibold text-sm text-foreground">
+          {emptyTitle || (compact ? "No Upcoming Milestones" : "No Upcoming Maturities")}
+        </h4>
         <p className="text-xs text-muted-foreground mt-1">
-          Add Fixed Deposits or Bonds to automatically see payout timelines here.
+          {emptyDescription ||
+            (compact
+              ? "Active obligations with scheduled tenures will appear here."
+              : "Add Fixed Deposits, Bonds, or Loans to automatically see payout timelines here.")}
         </p>
       </div>
     );
   }
+
+  const displayLimit = compact ? 4 : 6;
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card p-4 sm:p-6 shadow-sm space-y-4">
@@ -112,28 +131,32 @@ export function MaturityTimeline({
           </div>
           <div>
             <h3 className="font-semibold text-base text-foreground font-serif">
-              Maturity & Liquidity Timeline
+              {title}
             </h3>
             <p className="text-xs text-muted-foreground">
-              Scheduled FD payouts and debt payoff milestones
+              {description}
             </p>
           </div>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground self-start sm:self-auto">
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground self-start sm:self-auto shrink-0">
           {events.length} upcoming
         </span>
       </div>
 
       {/* Timeline items list */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-        {events.slice(0, 6).map((item) => {
+      <div
+        className={`grid gap-2.5 sm:gap-3 ${
+          compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+        }`}
+      >
+        {events.slice(0, displayLimit).map((item) => {
           const isMatured = item.daysRemaining <= 0;
           const isSoon = item.daysRemaining > 0 && item.daysRemaining <= 90;
 
           return (
             <div
               key={item.id}
-              className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col justify-between ${
+              className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
                 isMatured
                   ? "border-emerald-500/40 bg-emerald-500/5"
                   : isSoon
@@ -141,46 +164,60 @@ export function MaturityTimeline({
                   : "border-border/60 bg-muted/20"
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                      item.type === "LOAN_PAYOFF"
-                        ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                        : "bg-primary/10 text-primary"
-                    }`}
-                  >
-                    {item.type === "FD_MATURITY"
-                      ? "FD Payout"
+              {/* Header row: Badge and Amount */}
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${
+                    item.type === "LOAN_PAYOFF"
+                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
                       : item.type === "BOND_MATURITY"
-                      ? "Bond Redemption"
-                      : "Debt Free"}
-                  </span>
-                  <h4 className="font-semibold text-xs text-foreground mt-1.5 truncate">
-                    {item.title}
-                  </h4>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
-                    {item.sub}
-                  </p>
-                </div>
-                <div className="text-right shrink-0 pl-2">
-                  <span className="text-xs font-bold text-foreground font-serif">
-                    {formatCurrency(item.amount)}
-                  </span>
-                </div>
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : "bg-primary/10 text-primary"
+                  }`}
+                >
+                  {item.type === "FD_MATURITY"
+                    ? "FD Payout"
+                    : item.type === "BOND_MATURITY"
+                    ? "Bond Redemption"
+                    : "Debt Free"}
+                </span>
+                <span className="text-xs font-bold text-foreground font-serif shrink-0">
+                  {formatCurrency(item.amount)}
+                </span>
               </div>
 
-              <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {item.date.toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
+              {/* Title & Subtitle */}
+              <div className="min-w-0 flex-1">
+                <h4
+                  className="font-semibold text-xs text-foreground truncate"
+                  title={item.title}
+                >
+                  {item.title}
+                </h4>
+                {item.sub && (
+                  <p
+                    className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2"
+                    title={item.sub}
+                  >
+                    {item.sub}
+                  </p>
+                )}
+              </div>
+
+              {/* Footer row: Date and days remaining */}
+              <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 text-[11px]">
+                <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  <span>
+                    {item.date.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
                 </span>
                 <span
-                  className={`font-semibold ${
+                  className={`font-semibold shrink-0 ${
                     isMatured
                       ? "text-emerald-600 dark:text-emerald-400"
                       : isSoon
@@ -189,7 +226,9 @@ export function MaturityTimeline({
                   }`}
                 >
                   {isMatured
-                    ? "Matured"
+                    ? item.type === "LOAN_PAYOFF"
+                      ? "Paid Off"
+                      : "Matured"
                     : `In ${item.daysRemaining} days`}
                 </span>
               </div>
